@@ -6,57 +6,36 @@ module Bunny
     #
     # @private
     class ContinuationQueue
-      def initialize
-        @q    = []
-        @lock = ::Mutex.new
-        @cond = ::ConditionVariable.new
+      def initialize(*args, &block)
+        @q = ::Queue.new(*args)
       end
 
-      def push(item)
-        @lock.synchronize do
-          @q.push(item)
-          @cond.signal
-        end
+      def push(*args)
+        @q.push(*args)
       end
       alias << push
 
       def pop
-        poll
+        @q.pop
       end
 
       def poll(timeout_in_ms = nil)
-        timeout = timeout_in_ms ? timeout_in_ms / 1000.0 : nil
-
-        @lock.synchronize do
-          timeout_strikes_at = Time.now.utc + (timeout || 0)
-          while @q.empty?
-            wait = if timeout
-                     timeout_strikes_at - Time.now.utc
-                   else
-                     nil
-                   end
-            @cond.wait(@lock, wait)
-            raise ::Timeout::Error if wait && Time.now.utc >= timeout_strikes_at
+        if timeout_in_ms
+          Bunny::Timeout.timeout(timeout_in_ms / 1000.0, ::Timeout::Error) do
+            @q.pop
           end
-          item = @q.shift
-          item
+        else
+          @q.pop
         end
       end
 
       def clear
-        @lock.synchronize do
-          @q.clear
-        end
+        @q.clear
       end
 
-      def empty?
-        @q.empty?
+      def method_missing(selector, *args, &block)
+        @q.__send__(selector, *args, &block)
       end
-
-      def size
-        @q.size
-      end
-      alias length size
     end
   end
 end

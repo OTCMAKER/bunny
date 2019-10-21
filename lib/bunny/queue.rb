@@ -1,4 +1,4 @@
-require "bunny/get_response"
+require "bunny/compatibility"
 
 module Bunny
   # Represents AMQP 0.9.1 queue.
@@ -6,6 +6,9 @@ module Bunny
   # @see http://rubybunny.info/articles/queues.html Queues and Consumers guide
   # @see http://rubybunny.info/articles/extensions.html RabbitMQ Extensions guide
   class Queue
+
+    include Bunny::Compatibility
+
 
     #
     # API
@@ -18,7 +21,8 @@ module Bunny
     # @return [Hash] Options this queue was created with
     attr_reader :options
 
-    # @param [Bunny::Channel] channel Channel this queue will use.
+    # @param [Bunny::Channel] channel_or_connection Channel this queue will use. {Bunny::Session} instances are supported only for
+    #                                               backwards compatibility with 0.8.
     # @param [String] name                          Queue name. Pass an empty string to make RabbitMQ generate a unique one.
     # @param [Hash] opts                            Queue properties
     #
@@ -31,12 +35,13 @@ module Bunny
     # @see http://rubybunny.info/articles/queues.html Queues and Consumers guide
     # @see http://rubybunny.info/articles/extensions.html RabbitMQ Extensions guide
     # @api public
-    def initialize(channel, name = AMQ::Protocol::EMPTY_STRING, opts = {})
+    def initialize(channel_or_connection, name = AMQ::Protocol::EMPTY_STRING, opts = {})
       # old Bunny versions pass a connection here. In that case,
       # we just use default channel from it. MK.
-      @channel          = channel
+      @channel          = channel_from(channel_or_connection)
       @name             = name
       @options          = self.class.add_default_options(name, opts)
+      @consumers        = Hash.new
 
       @durable          = @options[:durable]
       @exclusive        = @options[:exclusive]
@@ -85,15 +90,6 @@ module Bunny
     # @api public
     def arguments
       @arguments
-    end
-
-    def to_s
-      oid = ("0x%x" % (self.object_id << 1))
-      "<#{self.class.name}:#{oid} @name=\"#{name}\" channel=#{@channel.to_s} @durable=#{@durable} @auto_delete=#{@auto_delete} @exclusive=#{@exclusive} @arguments=#{@arguments}>"
-    end
-
-    def inspect
-      to_s
     end
 
     # Binds queue to an exchange
@@ -155,9 +151,9 @@ module Bunny
     #
     # @param [Hash] opts Options
     #
-    # @option opts [Boolean] :ack (false) [DEPRECATED] Use :manual_ack instead
     # @option opts [Boolean] :manual_ack (false) Will this consumer use manual acknowledgements?
     # @option opts [Boolean] :exclusive (false) Should this consumer be exclusive for this queue?
+    # @option opts [Boolean] :block (false) Should the call block calling thread?
     # @option opts [#call] :on_cancellation Block to execute when this consumer is cancelled remotely (e.g. via the RabbitMQ Management plugin)
     # @option opts [String] :consumer_tag Unique consumer identifier. It is usually recommended to let Bunny generate it for you.
     # @option opts [Hash] :arguments ({}) Additional (optional) arguments, typically used by RabbitMQ extensions
@@ -166,22 +162,17 @@ module Bunny
     # @api public
     def subscribe(opts = {
                     :consumer_tag    => @channel.generate_consumer_tag,
-                    :manual_ack      => false,
+                    :ack             => false,
                     :exclusive       => false,
                     :block           => false,
                     :on_cancellation => nil
                   }, &block)
 
-      unless opts[:ack].nil?
-        warn "[DEPRECATION] `:ack` is deprecated.  Please use `:manual_ack` instead."
-        opts[:manual_ack] = opts[:ack]
-      end
-
       ctag       = opts.fetch(:consumer_tag, @channel.generate_consumer_tag)
       consumer   = Consumer.new(@channel,
                                 self,
                                 ctag,
-                                !opts[:manual_ack],
+                                !(opts[:ack] || opts[:manual_ack]),
                                 opts[:exclusive],
                                 opts[:arguments])
 
@@ -216,8 +207,7 @@ module Bunny
 
     # @param [Hash] opts Options
     #
-    # @option opts [Boolean] :ack (false) [DEPRECATED] Use :manual_ack instead
-    # @option opts [Boolean] :manual_ack (false) Will the message be acknowledged manually?
+    # @option opts [Boolean] :ack (false) Will the message be acknowledged manually?
     #
     # @return [Array] Triple of delivery info, message properties and message content.
     #                 If the queue is empty, all three will be nils.
@@ -238,34 +228,33 @@ module Bunny
     #
     #   puts "This is the message: " + payload + "\n\n"
     #   conn.close
-    def pop(opts = {:manual_ack => false}, &block)
-      unless opts[:ack].nil?
-        warn "[DEPRECATION] `:ack` is deprecated.  Please use `:manual_ack` instead."
-        opts[:manual_ack] = opts[:ack]
-      end
-
-      get_response, properties, content = @channel.basic_get(@name, opts)
+    def pop(opts = {:ack => false}, &block)
+      delivery_info, properties, content = @channel.basic_get(@name, opts)
 
       if block
-        if properties
-          di = GetResponse.new(get_response, @channel)
-          mp = MessageProperties.new(properties)
-
-          block.call(di, mp, content)
-        else
-          block.call(nil, nil, nil)
-        end
+        block.call(delivery_info, properties, content)
       else
-        if properties
-          di = GetResponse.new(get_response, @channel)
-          mp = MessageProperties.new(properties)
-          [di, mp, content]
-        else
-          [nil, nil, nil]
-        end
+        [delivery_info, properties, content]
       end
     end
     alias get pop
+
+    # Version of {Bunny::Queue#pop} that returns data in legacy format
+    # (as a hash).
+    # @return [Hash]
+    # @deprecated
+    def pop_as_hash(opts = {:ack => false}, &block)
+      delivery_info, properties, content = @channel.basic_get(@name, opts)
+
+      result = {:header => properties, :payload => content, :delivery_details => delivery_info}
+
+      if block
+        block.call(result)
+      else
+        result
+      end
+    end
+
 
     # Publishes a message to the queue via default exchange. Takes the same arguments
     # as {Bunny::Exchange#publish}
@@ -340,7 +329,7 @@ module Bunny
       # TODO: inject and use logger
       # puts "Recovering queue #{@name}"
       begin
-        declare! unless @options[:no_declare]
+        declare!
 
         @channel.register_queue(self)
       rescue Exception => e
@@ -371,6 +360,11 @@ module Bunny
     end
 
     protected
+
+    # @private
+    def self.add_default_options(name, opts, block)
+      { :queue => name, :nowait => (block.nil? && !name.empty?) }.merge(opts)
+    end
 
     # @private
     def self.add_default_options(name, opts)

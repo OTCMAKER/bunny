@@ -3,7 +3,7 @@ require "set"
 
 describe Bunny::Queue, "#subscribe_with" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -32,23 +32,23 @@ describe Bunny::Queue, "#subscribe_with" do
     it "requeues messages on channel closure" do
       ch1  = connection.create_channel
       ch2  = connection.create_channel
-      q1   = ch1.queue("bunny.tests.consumer_object1", exclusive: true)
-      q2   = ch2.queue("bunny.tests.consumer_object1", exclusive: true)
+      q1   = ch1.queue("bunny.tests.consumer_object1", :exclusive => true)
+      q2   = ch2.queue("bunny.tests.consumer_object1", :exclusive => true)
       ec   = ExampleConsumer.new(ch1, q1, "", false)
       x    = ch2.default_exchange
 
       t = Thread.new do
         50.times do
-          x.publish("hello", routing_key: q2.name)
+          x.publish("hello", :routing_key => q2.name)
         end
       end
       t.abort_on_exception = true
 
-      q1.subscribe_with(ec, manual_ack: true)
+      q1.subscribe_with(ec, :ack => true)
       sleep 2
       ch1.close
 
-      expect(q2.message_count).to eq 50
+      q2.message_count.should == 50
     end
   end
 end

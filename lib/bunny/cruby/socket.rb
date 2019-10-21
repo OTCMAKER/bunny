@@ -6,40 +6,23 @@ module Bunny
   #
   # Heavily inspired by Dalli by Mike Perham.
   # @private
-  module Socket
+  class Socket < TCPSocket
     attr_accessor :options
 
-    READ_RETRY_EXCEPTION_CLASSES = if defined?(IO::EAGAINWaitReadable)
-                                     # Ruby 2.1+
-                                     [Errno::EAGAIN, Errno::EWOULDBLOCK, IO::WaitReadable,
-                                      IO::EAGAINWaitReadable, IO::EWOULDBLOCKWaitReadable]
-                                   else
-                                     # 2.0
-                                     [Errno::EAGAIN, Errno::EWOULDBLOCK, IO::WaitReadable]
-                                   end
-    WRITE_RETRY_EXCEPTION_CLASSES = if defined?(IO::EAGAINWaitWritable)
-                                      [Errno::EAGAIN, Errno::EWOULDBLOCK, IO::WaitWritable,
-                                       IO::EAGAINWaitWritable, IO::EWOULDBLOCKWaitWritable]
-                                    else
-                                      # 2.0
-                                      [Errno::EAGAIN, Errno::EWOULDBLOCK, IO::WaitWritable]
-                                    end
+    # IO::WaitReadable is 1.9+ only
+    READ_RETRY_EXCEPTION_CLASSES = [Errno::EAGAIN, Errno::EWOULDBLOCK]
+    READ_RETRY_EXCEPTION_CLASSES << IO::WaitReadable if IO.const_defined?(:WaitReadable)
 
     def self.open(host, port, options = {})
-      socket = ::Socket.tcp(host, port, nil, nil,
-                            connect_timeout: options[:connect_timeout])
-      if ::Socket.constants.include?('TCP_NODELAY') || ::Socket.constants.include?(:TCP_NODELAY)
-        socket.setsockopt(::Socket::IPPROTO_TCP, ::Socket::TCP_NODELAY, true)
+      Timeout.timeout(options[:socket_timeout], ClientTimeout) do
+        sock = new(host, port)
+        if ::Socket.constants.include?('TCP_NODELAY') || ::Socket.constants.include?(:TCP_NODELAY)
+          sock.setsockopt(::Socket::IPPROTO_TCP, ::Socket::TCP_NODELAY, true)
+        end
+        sock.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_KEEPALIVE, true) if options.fetch(:keepalive, true)
+        sock.options = {:host => host, :port => port}.merge(options)
+        sock
       end
-      socket.setsockopt(::Socket::SOL_SOCKET, ::Socket::SO_KEEPALIVE, true) if options.fetch(:keepalive, true)
-      socket.instance_eval do
-        @__bunny_socket_eof_flag__ = false
-      end
-      socket.extend self
-      socket.options = { :host => host, :port => port }.merge(options)
-      socket
-    rescue Errno::ETIMEDOUT
-      raise ClientTimeout
     end
 
     # Reads given number of bytes with an optional timeout
@@ -79,32 +62,22 @@ module Bunny
     # if this is not appropriate in your case.
     #
     # @param [String] data Data to write
-    # @param [Integer] timeout Timeout
     #
     # @api public
-    def write_nonblock_fully(data, timeout = nil)
+    def write_nonblock_fully(data)
       return nil if @__bunny_socket_eof_flag__
 
-      length = data.bytesize
-      total_count = 0
-      count = 0
-      loop do
-        begin
-          count = self.write_nonblock(data)
-        rescue *WRITE_RETRY_EXCEPTION_CLASSES
-          if IO.select([], [self], nil, timeout)
-            retry
-          else
-            raise Timeout::Error, "IO timeout when writing to socket"
-          end
+      begin
+        while !data.empty?
+          written = self.write_nonblock(data)
+          data.slice!(0, written)
         end
-
-        total_count += count
-        return total_count if total_count >= length
-        data = data.byteslice(count..-1)
+      rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+        IO.select([], [self])
+        retry
       end
 
+      data.bytesize
     end
-
   end
 end

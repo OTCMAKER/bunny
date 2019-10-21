@@ -4,12 +4,6 @@ module Bunny
   class Exception < ::StandardError
   end
 
-  class HostListDepleted < Exception
-    def initialize
-      super("No more hosts to try in the supplied list of hosts")
-    end
-  end
-
   # Indicates a network failure. If automatic network
   # recovery mode is enabled, these will be typically handled
   # by the client itself.
@@ -60,29 +54,20 @@ module Bunny
     end
   end
 
+
   # Raised when TCP connection to RabbitMQ fails because of an unresolved
   # hostname, connectivity problem, etc
   class TCPConnectionFailed < Exception
     attr_reader :hostname, :port
 
-    def initialize(e, hostname=nil, port=nil)
+    def initialize(e, hostname, port)
       m = case e
           when String then
             e
-          when ::Exception then
+          when Exception then
             e.message
           end
-      if hostname && port
-        super("Could not establish TCP connection to #{hostname}:#{port}: #{m}")
-      else
-        super(m)
-      end
-    end
-  end
-
-  class TCPConnectionFailedForAllHosts < TCPConnectionFailed
-    def initialize
-      super("Could not establish TCP connection to any of the configured hosts", nil, nil)
+      super("Could not establish TCP connection to #{hostname}:#{port}: #{m}")
     end
   end
 
@@ -94,12 +79,6 @@ module Bunny
       else
         super("Trying to send frame through a closed connection. Frame is #{frame.inspect}")
       end
-    end
-  end
-
-  class ConnectionAlreadyClosed < Exception
-    def initialize
-      super('Connection has been already closed')
     end
   end
 

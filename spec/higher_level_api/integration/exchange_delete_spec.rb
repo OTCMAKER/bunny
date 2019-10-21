@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Exchange, "#delete" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -21,7 +21,7 @@ describe Bunny::Exchange, "#delete" do
       # no exception as of RabbitMQ 3.2. MK.
       x.delete
 
-      expect(ch.exchanges.size).to eq 0
+      ch.exchanges.size.should == 0
     end
   end
 
@@ -43,7 +43,7 @@ describe Bunny::Exchange, "#delete" do
       ch = connection.create_channel
       x  = ch.direct('amq.direct')
 
-      expect(x.delete).to eq nil
+      x.delete.should == nil
     end
   end
 
@@ -52,7 +52,7 @@ describe Bunny::Exchange, "#delete" do
       ch = connection.create_channel
       x  = ch.fanout('amq.fanout')
 
-      expect(x.delete).to eq nil
+      x.delete.should == nil
     end
   end
 
@@ -61,7 +61,7 @@ describe Bunny::Exchange, "#delete" do
       ch = connection.create_channel
       x  = ch.topic('amq.topic')
 
-      expect(x.delete).to eq nil
+      x.delete.should == nil
     end
   end
 
@@ -70,7 +70,7 @@ describe Bunny::Exchange, "#delete" do
       ch = connection.create_channel
       x  = ch.headers('amq.headers')
 
-      expect(x.delete).to eq nil
+      x.delete.should == nil
     end
   end
 
@@ -79,7 +79,7 @@ describe Bunny::Exchange, "#delete" do
       ch = connection.create_channel
       x  = ch.headers('amq.match')
 
-      expect(x.delete).to eq nil
+      x.delete.should == nil
     end
   end
 
@@ -89,16 +89,16 @@ describe Bunny::Exchange, "#delete" do
       it "returns true" do
         ch = connection.create_channel
 
-        expect(connection.exchange_exists?("amq.fanout")).to eq true
-        expect(connection.exchange_exists?("amq.direct")).to eq true
-        expect(connection.exchange_exists?("amq.topic")).to eq true
-        expect(connection.exchange_exists?("amq.match")).to eq true
+        connection.exchange_exists?("amq.fanout").should be_true
+        connection.exchange_exists?("amq.direct").should be_true
+        connection.exchange_exists?("amq.topic").should be_true
+        connection.exchange_exists?("amq.match").should be_true
       end
     end
 
     context "when a exchange DOES NOT exist" do
       it "returns false" do
-        expect(connection.exchange_exists?("suf89u9a4jo3ndnakls##{Time.now.to_i}")).to eq false
+        connection.exchange_exists?("suf89u9a4jo3ndnakls##{Time.now.to_i}").should be_false
       end
     end
   end

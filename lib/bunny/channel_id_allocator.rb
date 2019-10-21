@@ -17,9 +17,7 @@ module Bunny
     #
 
     # @param [Integer] max_channel Max allowed channel id
-    def initialize(max_channel = ((1 << 11) - 1))
-      # channel 0 has special meaning in the protocol, so start
-      # allocator at 1
+    def initialize(max_channel = ((1 << 16) - 1))
       @allocator = AMQ::IntAllocator.new(1, max_channel)
       @mutex     = Monitor.new
     end
@@ -27,7 +25,7 @@ module Bunny
 
     # Returns next available channel id. This method is thread safe.
     #
-    # @return [Integer]
+    # @return [Fixnum]
     # @api public
     # @see ChannelManager#release_channel_id
     # @see ChannelManager#reset_channel_id_allocator
@@ -39,7 +37,7 @@ module Bunny
 
     # Releases previously allocated channel id. This method is thread safe.
     #
-    # @param [Integer] i Channel id to release
+    # @param [Fixnum] i Channel id to release
     # @api public
     # @see ChannelManager#next_channel_id
     # @see ChannelManager#reset_channel_id_allocator
@@ -53,7 +51,7 @@ module Bunny
     # Returns true if given channel id has been previously allocated and not yet released.
     # This method is thread safe.
     #
-    # @param [Integer] i Channel id to check
+    # @param [Fixnum] i Channel id to check
     # @return [Boolean] true if given channel id has been previously allocated and not yet released
     # @api public
     # @see ChannelManager#next_channel_id

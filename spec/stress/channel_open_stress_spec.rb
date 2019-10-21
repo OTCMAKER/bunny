@@ -1,24 +1,18 @@
 require "spec_helper"
 
 describe "Rapidly opening and closing lots of channels" do
-  before :all do
-    @connection = Bunny.new(automatic_recovery: false).tap do |c|
-      c.start
-    end
-  end
-
-  after :all do
-    @connection.close
+  connection = Bunny.new(:automatic_recovery => false).tap do |c|
+    c.start
   end
 
   context "in a single-threaded scenario" do
     let(:n) { 500 }
 
     it "works correctly" do
-      xs = Array.new(n) { @connection.create_channel }
+      xs = Array.new(n) { connection.create_channel }
       puts "Opened #{n} channels"
 
-      expect(xs.size).to eq n
+      xs.size.should == n
       xs.each do |ch|
         ch.close
       end
@@ -41,12 +35,12 @@ describe "Rapidly opening and closing lots of channels" do
 
         n.times do
           t = Thread.new do
-            ch1 = @connection.create_channel
-            q   = ch1.queue("", exclusive: true)
+            ch1 = connection.create_channel
+            q   = ch1.queue("", :exclusive => true)
             q.delete
             ch1.close
 
-            ch2 = @connection.create_channel
+            ch2 = connection.create_channel
             ch2.close
           end
           t.abort_on_exception = true
@@ -68,8 +62,8 @@ describe "Rapidly opening and closing lots of channels" do
         n.times do
           t = Thread.new do
             3.times do
-              ch = @connection.create_channel
-              x  = ch.topic('bunny.stress.topics.t2', durable: false)
+              ch = connection.create_channel
+              x  = ch.topic('bunny.stress.topics.t2', :durable => false)
               ch.close
             end
           end

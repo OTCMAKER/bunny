@@ -8,8 +8,16 @@ $:.unshift(File.expand_path("../../../lib", __FILE__))
 
 require 'bunny'
 
-conn = Bunny.new(heartbeat_timeout: 8)
+conn = Bunny.new(:heartbeat_interval => 8)
 conn.start
+
+begin
+  ch1 = conn.create_channel
+  ch1.queue_delete("queue_that_should_not_exist#{rand}")
+rescue Bunny::NotFound => e
+  puts "Channel-level exception! Code: #{e.channel_close.reply_code}, message: #{e.channel_close.reply_text}"
+end
+
 
 begin
   ch2 = conn.create_channel

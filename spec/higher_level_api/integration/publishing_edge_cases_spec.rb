@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 require "spec_helper"
 
 unless ENV["CI"]
   describe "Message framing implementation" do
     let(:connection) do
-      c = Bunny.new(username: "bunny_gem",
-        password: "bunny_password",
-        vhost: "bunny_testbed",
-        port: ENV.fetch("RABBITMQ_PORT", 5672))
+      c = Bunny.new(:user     => "bunny_gem",
+        :password => "bunny_password",
+        :vhost    => "bunny_testbed",
+        :port     => ENV.fetch("RABBITMQ_PORT", 5672))
       c.start
       c
     end
@@ -21,38 +20,17 @@ unless ENV["CI"]
       it "successfully frames the message" do
         ch = connection.create_channel
 
-        q  = ch.queue("", exclusive: true)
+        q  = ch.queue("", :exclusive => true)
         x  = ch.default_exchange
 
         as = ("a" * (1024 * 1024 * 4 + 28237777))
-        x.publish(as, routing_key: q.name, persistent: true)
+        x.publish(as, :routing_key => q.name, :persistent => true)
 
         sleep(1)
-        expect(q.message_count).to eq 1
+        q.message_count.should == 1
 
         _, _, payload      = q.pop
-        expect(payload.bytesize).to eq as.bytesize
-
-        ch.close
-      end
-    end
-
-
-    context "with payload of several MBs of non-ASCII characters" do
-      it "successfully frames the message" do
-        ch = connection.create_channel
-
-        q  = ch.queue("", exclusive: true)
-        x  = ch.default_exchange
-
-        as = "кириллца, йо" * (1024 * 1024)
-        x.publish(as, routing_key: q.name, persistent: true)
-
-        sleep(1)
-        expect(q.message_count).to eq 1
-
-        _, _, payload      = q.pop
-        expect(payload.bytesize).to eq as.bytesize
+        payload.bytesize.should == as.bytesize
 
         ch.close
       end
@@ -64,21 +42,21 @@ unless ENV["CI"]
       it "successfully publishes the message" do
         ch = connection.create_channel
 
-        q  = ch.queue("", exclusive: true)
+        q  = ch.queue("", :exclusive => true)
         x  = ch.default_exchange
 
-        x.publish("", routing_key: q.name, persistent: false, mandatory: true)
+        x.publish("", :routing_key => q.name, :persistent => false, :mandatory => true)
 
         sleep(0.5)
-        expect(q.message_count).to eq 1
+        q.message_count.should == 1
 
         envelope, headers, payload = q.pop
 
-        expect(payload).to eq ""
+        payload.should == ""
 
-        expect(headers[:content_type]).to eq "application/octet-stream"
-        expect(headers[:delivery_mode]).to eq 1
-        expect(headers[:priority]).to eq 0
+        headers[:content_type].should == "application/octet-stream"
+        headers[:delivery_mode].should == 1
+        headers[:priority].should == 0
 
         ch.close
       end

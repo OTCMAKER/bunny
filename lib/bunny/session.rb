@@ -36,17 +36,21 @@ module Bunny
     DEFAULT_HEARTBEAT = :server
     # @private
     DEFAULT_FRAME_MAX = 131072
-    # Hard limit the user cannot go over regardless of server configuration.
+    # 2^16 - 1, maximum representable signed 16 bit integer.
     # @private
     CHANNEL_MAX_LIMIT   = 65535
-    DEFAULT_CHANNEL_MAX = 2047
+    DEFAULT_CHANNEL_MAX = CHANNEL_MAX_LIMIT
 
     # backwards compatibility
     # @private
     CONNECT_TIMEOUT   = Transport::DEFAULT_CONNECTION_TIMEOUT
 
     # @private
-    DEFAULT_CONTINUATION_TIMEOUT = 15000
+    DEFAULT_CONTINUATION_TIMEOUT = if RUBY_VERSION.to_f < 1.9
+                                     8000
+                                   else
+                                     4000
+                                   end
 
     # RabbitMQ client metadata
     DEFAULT_CLIENT_PROPERTIES = {
@@ -78,52 +82,35 @@ module Bunny
 
     # @return [Bunny::Transport]
     attr_reader :transport
-    attr_reader :status, :heartbeat, :user, :pass, :vhost, :frame_max, :channel_max, :threaded
+    attr_reader :status, :host, :port, :heartbeat, :user, :pass, :vhost, :frame_max, :channel_max, :threaded
     attr_reader :server_capabilities, :server_properties, :server_authentication_mechanisms, :server_locales
+    attr_reader :default_channel
     attr_reader :channel_id_allocator
     # Authentication mechanism, e.g. "PLAIN" or "EXTERNAL"
     # @return [String]
     attr_reader :mechanism
     # @return [Logger]
     attr_reader :logger
-    # @return [Integer] Timeout for blocking protocol operations (queue.declare, queue.bind, etc), in milliseconds. Default is 15000.
+    # @return [Integer] Timeout for blocking protocol operations (queue.declare, queue.bind, etc), in milliseconds. Default is 4000.
     attr_reader :continuation_timeout
-    attr_reader :network_recovery_interval
-    attr_accessor :socket_configurator
+
 
     # @param [String, Hash] connection_string_or_opts Connection string or a hash of connection options
     # @param [Hash] optz Extra options not related to connection
     #
     # @option connection_string_or_opts [String] :host ("127.0.0.1") Hostname or IP address to connect to
-    # @option connection_string_or_opts [Array<String>] :hosts (["127.0.0.1"]) list of hostname or IP addresses to select hostname from when connecting
-    # @option connection_string_or_opts [Array<String>] :addresses (["127.0.0.1:5672"]) list of addresses to select hostname and port from when connecting
     # @option connection_string_or_opts [Integer] :port (5672) Port RabbitMQ listens on
     # @option connection_string_or_opts [String] :username ("guest") Username
     # @option connection_string_or_opts [String] :password ("guest") Password
     # @option connection_string_or_opts [String] :vhost ("/") Virtual host to use
-    # @option connection_string_or_opts [Integer, Symbol] :heartbeat (:server) Heartbeat timeout to offer to the server. :server means use the value suggested by RabbitMQ. 0 means heartbeats and socket read timeouts will be disabled (not recommended).
+    # @option connection_string_or_opts [Integer] :heartbeat (600) Heartbeat interval. 0 means no heartbeat.
     # @option connection_string_or_opts [Integer] :network_recovery_interval (4) Recovery interval periodic network recovery will use. This includes initial pause after network failure.
     # @option connection_string_or_opts [Boolean] :tls (false) Should TLS/SSL be used?
     # @option connection_string_or_opts [String] :tls_cert (nil) Path to client TLS/SSL certificate file (.pem)
     # @option connection_string_or_opts [String] :tls_key (nil) Path to client TLS/SSL private key file (.pem)
     # @option connection_string_or_opts [Array<String>] :tls_ca_certificates Array of paths to TLS/SSL CA files (.pem), by default detected from OpenSSL configuration
-    # @option connection_string_or_opts [String] :verify_peer (true) Whether TLS peer verification should be performed
-    # @option connection_string_or_opts [Symbol] :tls_version (negotiated) What TLS version should be used (:TLSv1, :TLSv1_1, or :TLSv1_2)
-    # @option connection_string_or_opts [Integer] :channel_max (2047) Maximum number of channels allowed on this connection, minus 1 to account for the special channel 0.
-    # @option connection_string_or_opts [Integer] :continuation_timeout (15000) Timeout for client operations that expect a response (e.g. {Bunny::Queue#get}), in milliseconds.
-    # @option connection_string_or_opts [Integer] :connection_timeout (30) Timeout in seconds for connecting to the server.
-    # @option connection_string_or_opts [Integer] :read_timeout (30) TCP socket read timeout in seconds. If heartbeats are disabled this will be ignored.
-    # @option connection_string_or_opts [Integer] :write_timeout (30) TCP socket write timeout in seconds.
-    # @option connection_string_or_opts [Proc] :hosts_shuffle_strategy a callable that reorders a list of host strings, defaults to Array#shuffle
-    # @option connection_string_or_opts [Proc] :recovery_completed a callable that will be called when a network recovery is performed
-    # @option connection_string_or_opts [Logger] :logger The logger.  If missing, one is created using :log_file and :log_level.
-    # @option connection_string_or_opts [IO, String] :log_file The file or path to use when creating a logger.  Defaults to STDOUT.
-    # @option connection_string_or_opts [IO, String] :logfile DEPRECATED: use :log_file instead.  The file or path to use when creating a logger.  Defaults to STDOUT.
-    # @option connection_string_or_opts [Integer] :log_level The log level to use when creating a logger.  Defaults to LOGGER::WARN
-    # @option connection_string_or_opts [Boolean] :automatically_recover (true) Should automatically recover from network failures?
-    # @option connection_string_or_opts [Integer] :recovery_attempts (nil) Max number of recovery attempts, nil means forever
-    # @option connection_string_or_opts [Integer] :reset_recovery_attempts_after_reconnection (true) Should recovery attempt counter be reset after successful reconnection? When set to false, the attempt counter will last through the entire lifetime of the connection object.
-    # @option connection_string_or_opts [Boolean] :recover_from_connection_close (true) Should this connection recover after receiving a server-sent connection.close (e.g. connection was force closed)?
+    # @option connection_string_or_opts [Integer] :continuation_timeout (4000) Timeout for client operations that expect a response (e.g. {Bunny::Queue#get}), in milliseconds.
+    # @option connection_string_or_opts [Integer] :connection_timeout (5) Timeout in seconds for connecting to the server.
     #
     # @option optz [String] :auth_mechanism ("PLAIN") Authentication mechanism, PLAIN or EXTERNAL
     # @option optz [String] :locale ("PLAIN") Locale RabbitMQ should use
@@ -131,39 +118,26 @@ module Bunny
     # @see http://rubybunny.info/articles/connecting.html Connecting to RabbitMQ guide
     # @see http://rubybunny.info/articles/tls.html TLS/SSL guide
     # @api public
-    def initialize(connection_string_or_opts = ENV['RABBITMQ_URL'], optz = Hash.new)
-      opts = case (connection_string_or_opts)
+    def initialize(connection_string_or_opts = Hash.new, optz = Hash.new)
+      opts = case (ENV["RABBITMQ_URL"] || connection_string_or_opts)
              when nil then
                Hash.new
              when String then
-               self.class.parse_uri(connection_string_or_opts)
+               self.class.parse_uri(ENV["RABBITMQ_URL"] || connection_string_or_opts)
              when Hash then
                connection_string_or_opts
              end.merge(optz)
 
-      @default_hosts_shuffle_strategy = Proc.new { |hosts| hosts.shuffle }
-
       @opts            = opts
-      log_file         = opts[:log_file] || opts[:logfile] || STDOUT
-      log_level        = opts[:log_level] || ENV["BUNNY_LOG_LEVEL"] || Logger::WARN
-      # we might need to log a warning about ill-formatted IPv6 address but
-      # progname includes hostname, so init like this first
-      @logger          = opts.fetch(:logger, init_default_logger_without_progname(log_file, log_level))
-
-      @addresses       = self.addresses_from(opts)
-      @address_index   = 0
-
-      @transport       = nil
+      @host            = self.hostname_from(opts)
+      @port            = self.port_from(opts)
       @user            = self.username_from(opts)
       @pass            = self.password_from(opts)
       @vhost           = self.vhost_from(opts)
+      @logfile         = opts[:log_file] || opts[:logfile] || STDOUT
       @threaded        = opts.fetch(:threaded, true)
 
-      # re-init, see above
-      @logger          = opts.fetch(:logger, init_default_logger(log_file, log_level))
-
-      validate_connection_options(opts)
-      @last_connection_error = nil
+      @logger          = opts.fetch(:logger, init_logger(opts[:log_level] || ENV["BUNNY_LOG_LEVEL"] || Logger::WARN))
 
       # should automatic recovery from network failures be used?
       @automatically_recover = if opts[:automatically_recover].nil? && opts[:automatic_recovery].nil?
@@ -171,21 +145,12 @@ module Bunny
                                else
                                  opts[:automatically_recover] || opts[:automatic_recovery]
                                end
-      @recovering_from_network_failure = false
-      @max_recovery_attempts = opts[:recovery_attempts]
-      @recovery_attempts     = @max_recovery_attempts
-      # When this is set, connection attempts won't be reset after
-      # successful reconnection. Some find this behavior more sensible
-      # than the per-failure attempt counter. MK.
-      @reset_recovery_attempt_counter_after_reconnection = opts.fetch(:reset_recovery_attempts_after_reconnection, true)
-
       @network_recovery_interval = opts.fetch(:network_recovery_interval, DEFAULT_NETWORK_RECOVERY_INTERVAL)
-      @recover_from_connection_close = opts.fetch(:recover_from_connection_close, true)
+      @recover_from_connection_close = opts.fetch(:recover_from_connection_close, false)
       # in ms
-      @continuation_timeout   = opts.fetch(:continuation_timeout, DEFAULT_CONTINUATION_TIMEOUT)
+      @continuation_timeout      = opts.fetch(:continuation_timeout, DEFAULT_CONTINUATION_TIMEOUT)
 
       @status             = :not_connected
-      @manually_closed    = false
       @blocked            = false
 
       # these are negotiated with the broker during the connection tuning phase
@@ -193,12 +158,10 @@ module Bunny
       @client_channel_max = normalize_client_channel_max(opts.fetch(:channel_max, DEFAULT_CHANNEL_MAX))
       # will be-renegotiated during connection tuning steps. MK.
       @channel_max        = @client_channel_max
-      @heartbeat_sender   = nil
       @client_heartbeat   = self.heartbeat_from(opts)
 
-      client_props         = opts[:properties] || opts[:client_properties] || {}
-      @client_properties   = DEFAULT_CLIENT_PROPERTIES.merge(client_props)
-      @mechanism           = normalize_auth_mechanism(opts.fetch(:auth_mechanism, "PLAIN"))
+      @client_properties   = opts[:properties] || DEFAULT_CLIENT_PROPERTIES
+      @mechanism           = opts.fetch(:auth_mechanism, "PLAIN")
       @credentials_encoder = credentials_encoder_for(@mechanism)
       @locale              = @opts.fetch(:locale, DEFAULT_LOCALE)
 
@@ -210,26 +173,12 @@ module Bunny
       # the non-reentrant Ruby mutexes. MK.
       @transport_mutex     = @mutex_impl.new
       @status_mutex        = @mutex_impl.new
-      @address_index_mutex = @mutex_impl.new
-
       @channels            = Hash.new
-      @recovery_completed = opts[:recovery_completed]
 
       @origin_thread       = Thread.current
 
       self.reset_continuations
       self.initialize_transport
-
-    end
-
-    def validate_connection_options(options)
-      if options[:hosts] && options[:addresses]
-        raise ArgumentError, "Connection options can't contain hosts and addresses at the same time"
-      end
-
-      if (options[:host] || options[:hostname]) && (options[:hosts] || options[:addresses])
-        @logger.warn "Connection options contain both a host and an array of hosts (addresses), please pick one."
-      end
     end
 
     # @return [String] RabbitMQ hostname (or IP address) used
@@ -241,12 +190,8 @@ module Bunny
     # @return [String] Virtual host used
     def virtual_host; self.vhost; end
 
-    # @deprecated
-    # @return [Integer] Heartbeat timeout (not interval) used
+    # @return [Integer] Heartbeat interval used
     def heartbeat_interval; self.heartbeat; end
-
-    # @return [Integer] Heartbeat timeout used
-    def heartbeat_timeout; self.heartbeat; end
 
     # @return [Boolean] true if this connection uses TLS (SSL)
     def uses_tls?
@@ -263,18 +208,6 @@ module Bunny
     # @return [Boolean] true if this connection uses a separate thread for I/O activity
     def threaded?
       @threaded
-    end
-
-    def host
-      @transport ? @transport.host : host_from_address(@addresses[@address_index])
-    end
-
-    def port
-      @transport ? @transport.port : port_from_address(@addresses[@address_index])
-    end
-
-    def reset_address_index
-      @address_index_mutex.synchronize { @address_index = 0 }
     end
 
     # @private
@@ -308,53 +241,37 @@ module Bunny
       self.reset_continuations
 
       begin
-        begin
-          # close existing transport if we have one,
-          # to not leak sockets
-          @transport.maybe_initialize_socket
+        # close existing transport if we have one,
+        # to not leak sockets
+        @transport.maybe_initialize_socket
 
-          @transport.post_initialize_socket
-          @transport.connect
+        @transport.post_initialize_socket
+        @transport.connect
 
-          self.init_connection
-          self.open_connection
-
-          @reader_loop = nil
-          self.start_reader_loop if threaded?
-
-        rescue TCPConnectionFailed => e
-          @logger.warn e.message
-          self.initialize_transport
-          @logger.warn "Will try to connect to the next endpoint in line: #{@transport.host}:#{@transport.port}"
-
-          return self.start
-        rescue
-          @status_mutex.synchronize { @status = :not_connected }
-          raise
+        if @socket_configurator
+          @transport.configure_socket(&@socket_configurator)
         end
-      rescue HostListDepleted
-        self.reset_address_index
+
+        self.init_connection
+        self.open_connection
+
+        @reader_loop = nil
+        self.start_reader_loop if threaded?
+
+        @default_channel = self.create_channel
+      rescue Exception => e
         @status_mutex.synchronize { @status = :not_connected }
-        raise TCPConnectionFailedForAllHosts
+        raise e
       end
-      @status_mutex.synchronize { @manually_closed = false }
 
       self
     end
 
-    def update_secret(value, reason)
-      @transport.send_frame(AMQ::Protocol::Connection::UpdateSecret.encode(value, reason))
-      @last_update_secret_ok = wait_on_continuations
-      raise_if_continuation_resulted_in_a_connection_error!
-
-      @last_update_secret_ok
-    end
-
-    # Socket operation write timeout used by this connection
+    # Socket operation timeout used by this connection
     # @return [Integer]
     # @private
-    def transport_write_timeout
-      @transport.write_timeout
+    def read_write_timeout
+      @transport.read_write_timeout
     end
 
     # Opens a new channel and returns it. This method will block the calling
@@ -362,16 +279,14 @@ module Bunny
     # opened (this operation is very fast and inexpensive).
     #
     # @return [Bunny::Channel] Newly opened channel
-    def create_channel(n = nil, consumer_pool_size = 1, consumer_pool_abort_on_exception = false, consumer_pool_shutdown_timeout = 60)
+    def create_channel(n = nil, consumer_pool_size = 1)
       raise ArgumentError, "channel number 0 is reserved in the protocol and cannot be used" if 0 == n
-      raise ConnectionAlreadyClosed if manually_closed?
-      raise RuntimeError, "this connection is not open. Was Bunny::Session#start invoked? Is automatic recovery enabled?" if !connected?
 
       @channel_mutex.synchronize do
         if n && (ch = @channels[n])
           ch
         else
-          ch = Bunny::Channel.new(self, n, ConsumerWorkPool.new(consumer_pool_size || 1, consumer_pool_abort_on_exception, consumer_pool_shutdown_timeout))
+          ch = Bunny::Channel.new(self, n, ConsumerWorkPool.new(consumer_pool_size || 1))
           ch.open
           ch
         end
@@ -380,26 +295,19 @@ module Bunny
     alias channel create_channel
 
     # Closes the connection. This involves closing all of its channels.
-    def close(await_response = true)
+    def close
       @status_mutex.synchronize { @status = :closing }
 
       ignoring_io_errors do
         if @transport.open?
-          @logger.debug "Transport is still open..."
           close_all_channels
 
-          @logger.debug "Will close all channels...."
-          self.close_connection(await_response)
+          self.close_connection(true)
         end
 
         clean_up_on_shutdown
       end
-      @status_mutex.synchronize do
-        @status = :closed
-        @manually_closed = true
-      end
-      @logger.debug "Connection is closed"
-      true
+      @status_mutex.synchronize { @status = :closed }
     end
     alias stop close
 
@@ -434,11 +342,6 @@ module Bunny
       @status_mutex.synchronize { @status == :closed }
     end
 
-    # @return [Boolean] true if this AMQP 0.9.1 connection has been closed by the user (as opposed to the server)
-    def manually_closed?
-      @status_mutex.synchronize { @manually_closed == true }
-    end
-
     # @return [Boolean] true if this AMQP 0.9.1 connection is open
     def open?
       @status_mutex.synchronize do
@@ -450,6 +353,40 @@ module Bunny
     # @return [Boolean] true if this connection has automatic recovery from network failure enabled
     def automatically_recover?
       @automatically_recover
+    end
+
+    #
+    # Backwards compatibility
+    #
+
+    # @private
+    def queue(*args)
+      @default_channel.queue(*args)
+    end
+
+    # @private
+    def direct(*args)
+      @default_channel.direct(*args)
+    end
+
+    # @private
+    def fanout(*args)
+      @default_channel.fanout(*args)
+    end
+
+    # @private
+    def topic(*args)
+      @default_channel.topic(*args)
+    end
+
+    # @private
+    def headers(*args)
+      @default_channel.headers(*args)
+    end
+
+    # @private
+    def exchange(*args)
+      @default_channel.exchange(*args)
     end
 
     # Defines a callback that will be executed when RabbitMQ blocks the connection
@@ -485,7 +422,7 @@ module Bunny
     # @param [String] uri amqp or amqps URI to parse
     # @return [Hash] Parsed URI as a hash
     def self.parse_uri(uri)
-      AMQ::Settings.configure(uri)
+      AMQ::Settings.parse_amqp_url(uri)
     end
 
     # Checks if a queue with given name exists.
@@ -535,18 +472,16 @@ module Bunny
 
     # @private
     def open_channel(ch)
-      @channel_mutex.synchronize do
-        n = ch.number
-        self.register_channel(ch)
+      n = ch.number
+      self.register_channel(ch)
 
-        @transport_mutex.synchronize do
-          @transport.send_frame(AMQ::Protocol::Channel::Open.encode(n, AMQ::Protocol::EMPTY_STRING))
-        end
-        @last_channel_open_ok = wait_on_continuations
-        raise_if_continuation_resulted_in_a_connection_error!
-
-        @last_channel_open_ok
+      @transport_mutex.synchronize do
+        @transport.send_frame(AMQ::Protocol::Channel::Open.encode(n, AMQ::Protocol::EMPTY_STRING))
       end
+      @last_channel_open_ok = wait_on_continuations
+      raise_if_continuation_resulted_in_a_connection_error!
+
+      @last_channel_open_ok
     end
 
     # @private
@@ -559,38 +494,23 @@ module Bunny
         raise_if_continuation_resulted_in_a_connection_error!
 
         self.unregister_channel(ch)
-        self.release_channel_id(ch.id)
         @last_channel_close_ok
       end
     end
 
     # @private
-    def find_channel(number)
-      @channels[number]
-    end
-
-    # @private
-    def synchronised_find_channel(number)
-      @channel_mutex.synchronize { @channels[number] }
-    end
-
-    # @private
     def close_all_channels
-      @channel_mutex.synchronize do
-        @channels.reject {|n, ch| n == 0 || !ch.open? }.each do |_, ch|
-          Bunny::Timeout.timeout(@transport.disconnect_timeout, ClientTimeout) { ch.close }
-        end
+      @channels.reject {|n, ch| n == 0 || !ch.open? }.each do |_, ch|
+        Bunny::Timeout.timeout(@transport.disconnect_timeout, ClientTimeout) { ch.close }
       end
     end
 
     # @private
-    def close_connection(await_response = true)
+    def close_connection(sync = true)
       if @transport.open?
-        @logger.debug "Transport is still open"
         @transport.send_frame(AMQ::Protocol::Connection::Close.encode(200, "Goodbye", 0, 0))
 
-        if await_response
-          @logger.debug "Waiting for a connection.close-ok..."
+        if sync
           @last_connection_close_ok = wait_on_continuations
         end
       end
@@ -609,7 +529,7 @@ module Bunny
     #
     # @private
     def handle_frame(ch_number, method)
-      @logger.debug { "Session#handle_frame on #{ch_number}: #{method.inspect}" }
+      @logger.debug "Session#handle_frame on #{ch_number}: #{method.inspect}"
       case method
       when AMQ::Protocol::Channel::OpenOk then
         @continuations.push(method)
@@ -640,24 +560,17 @@ module Bunny
       when AMQ::Protocol::Connection::Unblocked then
         @blocked = false
         @unblock_callback.call(method) if @unblock_callback
-      when AMQ::Protocol::Connection::UpdateSecretOk then
-        @continuations.push(method)
       when AMQ::Protocol::Channel::Close then
         begin
-          ch = synchronised_find_channel(ch_number)
-          # this includes sending a channel.close-ok and
-          # potentially invoking a user-provided callback,
-          # avoid doing that while holding a mutex lock. MK.
+          ch = @channels[ch_number]
           ch.handle_method(method)
         ensure
-          # synchronises on @channel_mutex under the hood
           self.unregister_channel(ch)
         end
       when AMQ::Protocol::Basic::GetEmpty then
-        ch = find_channel(ch_number)
-        ch.handle_basic_get_empty(method)
+        @channels[ch_number].handle_basic_get_empty(method)
       else
-        if ch = find_channel(ch_number)
+        if ch = @channels[ch_number]
           ch.handle_method(method)
         else
           @logger.warn "Channel #{ch_number} is not open on this connection!"
@@ -701,18 +614,15 @@ module Bunny
         begin
           @recovering_from_network_failure = true
           if recoverable_network_failure?(exception)
-            announce_network_failure_recovery
-            @channel_mutex.synchronize do
-              @channels.each do |n, ch|
-                ch.maybe_kill_consumer_work_pool!
-              end
+            @logger.warn "Recovering from a network failure..."
+            @channels.each do |n, ch|
+              ch.maybe_kill_consumer_work_pool!
             end
-            @reader_loop.stop if @reader_loop
             maybe_shutdown_heartbeat_sender
 
             recover_from_network_failure
           else
-            @logger.error "Exception #{exception.message} is considered unrecoverable..."
+            # TODO: investigate if we can be a bit smarter here. MK.
           end
         ensure
           @recovering_from_network_failure = false
@@ -722,8 +632,7 @@ module Bunny
 
     # @private
     def recoverable_network_failure?(exception)
-      # No reasonably smart strategy was suggested in a few years.
-      # So just recover unconditionally. MK.
+      # TODO: investigate if we can be a bit smarter here. MK.
       true
     end
 
@@ -733,98 +642,35 @@ module Bunny
     end
 
     # @private
-    def announce_network_failure_recovery
-      if recovery_attempts_limited?
-        @logger.warn "Will recover from a network failure (#{@recovery_attempts} out of #{@max_recovery_attempts} left)..."
-      else
-        @logger.warn "Will recover from a network failure (no retry limit)..."
-      end
-    end
-
-    # @private
     def recover_from_network_failure
-      sleep @network_recovery_interval
-      @logger.debug "Will attempt connection recovery..."
+      begin
+        sleep @network_recovery_interval
+        @logger.debug "About to start connection recovery..."
+        self.initialize_transport
+        self.start
 
-      self.initialize_transport
+        if open?
+          @recovering_from_network_failure = false
 
-      @logger.warn "Retrying connection on next host in line: #{@transport.host}:#{@transport.port}"
-      self.start
-
-      if open?
-
-        @recovering_from_network_failure = false
-        @logger.debug "Connection is now open"
-        if @reset_recovery_attempt_counter_after_reconnection
-          @logger.debug "Resetting recovery attempt counter after successful reconnection"
-          reset_recovery_attempt_counter!
-        else
-          @logger.debug "Not resetting recovery attempt counter after successful reconnection, as configured"
+          recover_channels
         end
-
-        recover_channels
-        notify_of_recovery_completion
+      rescue TCPConnectionFailed, AMQ::Protocol::EmptyResponseError => e
+        @logger.warn "TCP connection failed, reconnecting in #{@network_recovery_interval} seconds"
+        sleep @network_recovery_interval
+        retry if recoverable_network_failure?(e)
       end
-    rescue HostListDepleted
-      reset_address_index
-      retry
-    rescue TCPConnectionFailedForAllHosts, TCPConnectionFailed, AMQ::Protocol::EmptyResponseError, SystemCallError, Timeout::Error => e
-      @logger.warn "TCP connection failed, reconnecting in #{@network_recovery_interval} seconds"
-      if should_retry_recovery?
-        decrement_recovery_attemp_counter!
-        if recoverable_network_failure?(e)
-          announce_network_failure_recovery
-          retry
-        end
-      else
-        @logger.error "Ran out of recovery attempts (limit set to #{@max_recovery_attempts}), giving up"
-        @transport.close
-        self.close(false)
-        @manually_closed = false
-      end
-    end
-
-    # @private
-    def recovery_attempts_limited?
-      !!@max_recovery_attempts
-    end
-
-    # @private
-    def should_retry_recovery?
-      !recovery_attempts_limited? || @recovery_attempts > 1
-    end
-
-    # @private
-    def decrement_recovery_attemp_counter!
-      if @recovery_attempts
-        @recovery_attempts -= 1
-        @logger.debug "#{@recovery_attempts} recovery attempts left"
-      end
-      @recovery_attempts
-    end
-
-    # @private
-    def reset_recovery_attempt_counter!
-      @recovery_attempts = @max_recovery_attempts
     end
 
     # @private
     def recover_channels
-      @channel_mutex.synchronize do
-        @channels.each do |n, ch|
-          ch.open
-          ch.recover_from_network_failure
-        end
+      # default channel is reopened right after connection
+      # negotiation is completed, so make sure we do not try to open
+      # it twice. MK.
+      @channels.reject { |n, ch| ch == @default_channel }.each do |n, ch|
+        ch.open
+
+        ch.recover_from_network_failure
       end
-    end
-
-    def after_recovery_completed(&block)
-      @recovery_completed = block
-    end
-
-    # @private
-    def notify_of_recovery_completion
-      @recovery_completed.call if @recovery_completed
     end
 
     # @private
@@ -873,7 +719,7 @@ module Bunny
         shut_down_all_consumer_work_pools!
         maybe_shutdown_reader_loop
         maybe_shutdown_heartbeat_sender
-      rescue ShutdownSignal => _sse
+      rescue ShutdownSignal => sse
         # no-op
       rescue Exception => e
         @logger.warn "Caught an exception when cleaning up after receiving connection.close: #{e.message}"
@@ -883,18 +729,8 @@ module Bunny
     end
 
     # @private
-    def addresses_from(options)
-      shuffle_strategy = options.fetch(:hosts_shuffle_strategy, @default_hosts_shuffle_strategy)
-
-      addresses = options[:host] || options[:hostname] || options[:addresses] ||
-        options[:hosts] || ["#{DEFAULT_HOST}:#{port_from(options)}"]
-      addresses = [addresses] unless addresses.is_a? Array
-
-      addrs = addresses.map do |address|
-        host_with_port?(address) ? address : "#{address}:#{port_from(@opts)}"
-      end
-
-      shuffle_strategy.call(addrs)
+    def hostname_from(options)
+      options[:host] || options[:hostname] || DEFAULT_HOST
     end
 
     # @private
@@ -906,63 +742,6 @@ module Bunny
                  end
 
       options.fetch(:port, fallback)
-    end
-
-    # @private
-    def host_with_port?(address)
-      # we need to handle cases such as [2001:db8:85a3:8d3:1319:8a2e:370:7348]:5671
-      last_colon                  = address.rindex(":")
-      last_closing_square_bracket = address.rindex("]")
-
-      if last_closing_square_bracket.nil?
-        address.include?(":")
-      else
-        last_closing_square_bracket < last_colon
-      end
-    end
-
-    # @private
-    def host_from_address(address)
-      # we need to handle cases such as [2001:db8:85a3:8d3:1319:8a2e:370:7348]:5671
-      last_colon                  = address.rindex(":")
-      last_closing_square_bracket = address.rindex("]")
-
-      if last_closing_square_bracket.nil?
-        parts = address.split(":")
-        # this looks like an unquoted IPv6 address, so emit a warning
-        if parts.size > 2
-          @logger.warn "Address #{address} looks like an unquoted IPv6 address. Make sure you quote IPv6 addresses like so: [2001:db8:85a3:8d3:1319:8a2e:370:7348]"
-        end
-        return parts[0]
-      end
-
-      if last_closing_square_bracket < last_colon
-        # there is a port
-        address[0, last_colon]
-      elsif last_closing_square_bracket > last_colon
-        address
-      end
-    end
-
-    # @private
-    def port_from_address(address)
-      # we need to handle cases such as [2001:db8:85a3:8d3:1319:8a2e:370:7348]:5671
-      last_colon                  = address.rindex(":")
-      last_closing_square_bracket = address.rindex("]")
-
-      if last_closing_square_bracket.nil?
-        parts = address.split(":")
-        # this looks like an unquoted IPv6 address, so emit a warning
-        if parts.size > 2
-          @logger.warn "Address #{address} looks like an unquoted IPv6 address. Make sure you quote IPv6 addresses like so: [2001:db8:85a3:8d3:1319:8a2e:370:7348]"
-        end
-        return parts[1].to_i
-      end
-
-      if last_closing_square_bracket < last_colon
-        # there is a port
-        address[(last_colon + 1)..-1].to_i
-      end
     end
 
     # @private
@@ -982,7 +761,7 @@ module Bunny
 
     # @private
     def heartbeat_from(options)
-      options[:heartbeat] || options[:heartbeat_timeout] || options[:requested_heartbeat] || options[:heartbeat_interval] || DEFAULT_HEARTBEAT
+      options[:heartbeat] || options[:heartbeat_interval] || options[:requested_heartbeat] || DEFAULT_HEARTBEAT
     end
 
     # @private
@@ -1098,7 +877,7 @@ module Bunny
       end
     end
 
-    # Sends multiple frames, in one go. For thread safety this method takes a channel
+    # Sends multiple frames, one by one. For thread safety this method takes a channel
     # object and synchronizes on it.
     #
     # @private
@@ -1107,18 +886,10 @@ module Bunny
       # threads publish on the same channel aggressively, at some point frames will be
       # delivered out of order and broker will raise 505 UNEXPECTED_FRAME exception.
       # If we synchronize on the channel, however, this is both thread safe and pretty fine-grained
-      # locking. Note that "single frame" methods technically do not need this kind of synchronization
-      # (no incorrect frame interleaving of the same kind as with basic.publish isn't possible) but we
-      # still recommend not sharing channels between threads except for consumer-only cases in the docs. MK.
+      # locking. Note that "single frame" methods do not need this kind of synchronization. MK.
       channel.synchronize do
-        # see rabbitmq/rabbitmq-server#156
-        if open?
-          data = frames.reduce("") { |acc, frame| acc << frame.encode }
-          @transport.write(data)
-          signal_activity!
-        else
-          raise ConnectionClosedError.new(frames)
-        end
+        frames.each { |frame| self.send_frame(frame, false) }
+        signal_activity!
       end
     end # send_frameset(frames)
 
@@ -1132,14 +903,10 @@ module Bunny
       # threads publish on the same channel aggressively, at some point frames will be
       # delivered out of order and broker will raise 505 UNEXPECTED_FRAME exception.
       # If we synchronize on the channel, however, this is both thread safe and pretty fine-grained
-      # locking. See a note about "single frame" methods in a comment in `send_frameset`. MK.
+      # locking. Note that "single frame" methods do not need this kind of synchronization. MK.
       channel.synchronize do
-        if open?
-          frames.each { |frame| self.send_frame_without_timeout(frame, false) }
-          signal_activity!
-        else
-          raise ConnectionClosedError.new(frames)
-        end
+        frames.each { |frame| self.send_frame_without_timeout(frame, false) }
+        signal_activity!
       end
     end # send_frameset_without_timeout(frames)
 
@@ -1159,12 +926,7 @@ module Bunny
     # @return [String]
     # @api public
     def to_s
-      oid = ("0x%x" % (self.object_id << 1))
-      "#<#{self.class.name}:#{oid} #{@user}@#{host}:#{port}, vhost=#{@vhost}, addresses=[#{@addresses.join(',')}]>"
-    end
-
-    def inspect
-      to_s
+      "#<#{self.class.name}:#{object_id} #{@user}@#{@host}:#{@port}, vhost=#{@vhost}>"
     end
 
     protected
@@ -1197,11 +959,13 @@ module Bunny
                 fr
                 # frame timeout means the broker has closed the TCP connection, which it
                 # does per 0.9.1 spec.
-              rescue
+              rescue Errno::ECONNRESET, ClientTimeout, AMQ::Protocol::EmptyResponseError, EOFError, IOError => e
                 nil
               end
       if frame.nil?
-        raise TCPConnectionFailed.new('An empty frame was received while opening the connection. In RabbitMQ <= 3.1 this could mean an authentication issue.')
+        @state = :closed
+        @logger.error "RabbitMQ closed TCP connection before AMQP 0.9.1 connection was finalized. Most likely this means authentication failure."
+        raise Bunny::PossibleAuthenticationFailureError.new(self.user, self.vhost, self.password.size)
       end
 
       response = frame.decode_payload
@@ -1223,28 +987,19 @@ module Bunny
                               else
                                 negotiate_value(@client_heartbeat, connection_tune.heartbeat)
                               end
-      @logger.debug { "Heartbeat interval negotiation: client = #{@client_heartbeat}, server = #{connection_tune.heartbeat}, result = #{@heartbeat}" }
+      @logger.debug "Heartbeat interval negotiation: client = #{@client_heartbeat}, server = #{connection_tune.heartbeat}, result = #{@heartbeat}"
       @logger.info "Heartbeat interval used (in seconds): #{@heartbeat}"
-
-      # We set the read_write_timeout to twice the heartbeat value,
-      # and then some padding for edge cases.
-      # This allows us to miss a single heartbeat before we time out the socket.
-      # If heartbeats are disabled, assume that TCP keepalives or a similar mechanism will be used
-      # and disable socket read timeouts. See ruby-amqp/bunny#551.
-      @transport.read_timeout = @heartbeat * 2.2
-      @logger.debug { "Will use socket read timeout of #{@transport.read_timeout.to_i} seconds" }
 
       # if there are existing channels we've just recovered from
       # a network failure and need to fix the allocated set. See issue 205. MK.
       if @channels.empty?
-        @logger.debug { "Initializing channel ID allocator with channel_max = #{@channel_max}" }
         @channel_id_allocator = ChannelIdAllocator.new(@channel_max)
       end
 
       @transport.send_frame(AMQ::Protocol::Connection::TuneOk.encode(@channel_max, @frame_max, @heartbeat))
-      @logger.debug { "Sent connection.tune-ok with heartbeat interval = #{@heartbeat}, frame_max = #{@frame_max}, channel_max = #{@channel_max}" }
+      @logger.debug "Sent connection.tune-ok with heartbeat interval = #{@heartbeat}, frame_max = #{@frame_max}, channel_max = #{@channel_max}"
       @transport.send_frame(AMQ::Protocol::Connection::Open.encode(self.vhost))
-      @logger.debug { "Sent connection.open with vhost = #{self.vhost}" }
+      @logger.debug "Sent connection.open with vhost = #{self.vhost}"
 
       frame2 = begin
                  fr = @transport.read_next_frame
@@ -1254,11 +1009,13 @@ module Bunny
                  fr
                  # frame timeout means the broker has closed the TCP connection, which it
                  # does per 0.9.1 spec.
-               rescue
+               rescue Errno::ECONNRESET, ClientTimeout, AMQ::Protocol::EmptyResponseError, EOFError => e
                  nil
                end
       if frame2.nil?
-        raise TCPConnectionFailed.new('An empty frame was received while opening the connection. In RabbitMQ <= 3.1 this could mean an authentication issue.')
+        @state = :closed
+        @logger.warn "RabbitMQ closed TCP connection before AMQP 0.9.1 connection was finalized. Most likely this means authentication failure."
+        raise Bunny::PossibleAuthenticationFailureError.new(self.user, self.vhost, self.password.size)
       end
       connection_open_ok = frame2.decode_payload
 
@@ -1273,7 +1030,7 @@ module Bunny
           begin
             shut_down_all_consumer_work_pools!
             maybe_shutdown_reader_loop
-          rescue ShutdownSignal => _sse
+          rescue ShutdownSignal => sse
             # no-op
           rescue Exception => e
             @logger.warn "Caught an exception when cleaning up after receiving connection.close: #{e.message}"
@@ -1298,7 +1055,7 @@ module Bunny
 
     # @private
     def negotiate_value(client_value, server_value)
-      return server_value if [:server, "server"].include?(client_value)
+      return server_value if client_value == :server
 
       if client_value == 0 || server_value == 0
         [client_value, server_value].max
@@ -1322,22 +1079,7 @@ module Bunny
 
     # @private
     def initialize_transport
-      if address = @addresses[ @address_index ]
-        @address_index_mutex.synchronize { @address_index += 1 }
-        @transport.close rescue nil # Let's make sure the previous transport socket is closed
-        @transport = Transport.new(self,
-                                   host_from_address(address),
-                                   port_from_address(address),
-                                   @opts.merge(:session_thread => @origin_thread)
-                                  )
-
-        # Reset the cached progname for the logger only when no logger was provided
-        @default_logger.progname = self.to_s
-
-        @transport
-      else
-        raise HostListDepleted
-      end
+      @transport = Transport.new(self, @host, @port, @opts.merge(:session_thread => @origin_thread))
     end
 
     # @private
@@ -1385,22 +1127,12 @@ module Bunny
     end
 
     # @private
-    def init_default_logger(logfile, level)
-      @default_logger = begin
-                          lgr = ::Logger.new(logfile)
-                          lgr.level    = normalize_log_level(level)
-                          lgr.progname = self.to_s
-                          lgr
-                        end
-    end
+    def init_logger(level)
+      lgr          = ::Logger.new(@logfile)
+      lgr.level    = normalize_log_level(level)
+      lgr.progname = self.to_s
 
-    # @private
-    def init_default_logger_without_progname(logfile, level)
-      @default_logger = begin
-                          lgr = ::Logger.new(logfile)
-                          lgr.level    = normalize_log_level(level)
-                          lgr
-                        end
+      lgr
     end
 
     # @private
@@ -1424,7 +1156,6 @@ module Bunny
     end
 
     def normalize_client_channel_max(n)
-      return CHANNEL_MAX_LIMIT if n.nil?
       return CHANNEL_MAX_LIMIT if n > CHANNEL_MAX_LIMIT
 
       case n
@@ -1432,17 +1163,6 @@ module Bunny
         CHANNEL_MAX_LIMIT
       else
         n
-      end
-    end
-
-    def normalize_auth_mechanism(value)
-      case value
-      when [] then
-        "PLAIN"
-      when nil then
-        "PLAIN"
-      else
-        value
       end
     end
 

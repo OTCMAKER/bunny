@@ -29,7 +29,6 @@ module Bunny
         @interval = [(period / 2) - 1, 0.4].max
 
         @thread = Thread.new(&method(:run))
-        @thread.report_on_exception = false if @thread.respond_to?(:report_on_exception)
       end
     end
 
@@ -63,8 +62,8 @@ module Bunny
       now = Time.now
 
       if now > (@last_activity_time + @interval)
-        @logger.debug { "Sending a heartbeat, last activity time: #{@last_activity_time}, interval (s): #{@interval}" }
-        @transport.write_without_timeout(AMQ::Protocol::HeartbeatFrame.encode, true)
+        @logger.debug "Sending a heartbeat, last activity time: #{@last_activity_time}, interval (s): #{@interval}"
+        @transport.write_without_timeout(AMQ::Protocol::HeartbeatFrame.encode)
       end
     end
   end

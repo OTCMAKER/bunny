@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe "amq.* exchanges" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -16,7 +16,7 @@ describe "amq.* exchanges" do
 
     ["amq.fanout", "amq.direct", "amq.topic", "amq.match", "amq.headers"].each do |e|
       x = ch.exchange(e)
-      expect(x).to be_predeclared
+      x.should be_predeclared
     end
 
     ch.close

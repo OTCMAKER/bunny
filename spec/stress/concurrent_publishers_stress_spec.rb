@@ -3,27 +3,31 @@ require "spec_helper"
 
 unless ENV["CI"]
   describe "Concurrent publishers sharing a connection" do
-    before :all do
-      @connection = Bunny.new(username: "bunny_gem", password: "bunny_password",
-        vhost: "bunny_testbed", automatically_recover: false)
-      @connection.start
+    let(:connection) do
+      c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed", :automatically_recover => false, :continuation_timeout => 20.0)
+      c.start
+      c
     end
 
     after :all do
-      @connection.close
+      connection.close
     end
 
     let(:concurrency) { 24 }
-    let(:messages)    { 5_000 }
+    let(:rate)        { 5_000 }
 
     it "successfully finish publishing" do
+      ch = connection.create_channel
+
+      q    = ch.queue("", :exclusive => true)
       body = "сообщение"
+
+      # let the queue name be sent back by RabbitMQ
+      sleep 0.25
 
       chs  = {}
       concurrency.times do |i|
-        ch     = @connection.create_channel
-        ch.confirm_select
-        chs[i] = ch
+        chs[i] = connection.create_channel
       end
 
       ts = []
@@ -31,13 +35,14 @@ unless ENV["CI"]
       concurrency.times do |i|
         t = Thread.new do
           cht = chs[i]
-          x   = cht.default_exchange
+          x   = ch.default_exchange
 
-          messages.times do
-            x.publish(body)
+          5.times do |i|
+            rate.times do
+              x.publish(body, :routing_key => q.name)
+            end
+            puts "Published #{(i + 1) * rate} messages..."
           end
-          puts "Published #{messages} messages..."
-          cht.wait_for_confirms
         end
         t.abort_on_exception = true
 
@@ -47,8 +52,6 @@ unless ENV["CI"]
       ts.each do |t|
         t.join
       end
-
-      chs.each { |_, ch| ch.close }
     end
   end
 end

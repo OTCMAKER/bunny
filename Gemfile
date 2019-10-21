@@ -11,7 +11,7 @@ extend Module.new {
 
     local_path = File.expand_path("../vendor/#{name}", __FILE__)
     if File.exist?(local_path)
-      super name, options.merge(path: local_path).
+      super name, options.merge(:path => local_path).
         delete_if { |key, _| [:git, :branch].include?(key) }
     else
       super name, *args
@@ -19,23 +19,23 @@ extend Module.new {
   end
 }
 
-gem "rake", ">= 12.3.1"
+gem "SystemTimer", "~> 1.2.3", :platform => :ruby_18
+
+gem "rake", ">= 10.0.4"
+gem "effin_utf8"
 
 group :development do
   gem "yard"
 
-  gem "redcarpet", platform: :mri
-  gem "ruby-prof", platform: :mri
+  gem "redcarpet", :platform => :mri
+  gem "ruby-prof", :platform => :mri
 
-  gem "ripl"
-  gem "ripl-multi_line"
-  gem "ripl-irb"
+  gem "json",      :platform => :ruby_18
 end
 
 group :test do
-  gem "rspec", "~> 3.8.0"
-  gem "rabbitmq_http_api_client", "~> 1.11.0", require: "rabbitmq/http/client"
-  gem "toxiproxy", "~> 1.0.3"
+  gem "rspec", ">= 2.13.0"
+  gem "rabbitmq_http_api_client", "~> 1.1.0"
 end
 
 gemspec
@@ -45,11 +45,11 @@ gemspec
 def custom_gem(name, options = Hash.new)
   local_path = File.expand_path("../vendor/#{name}", __FILE__)
   if File.exist?(local_path)
-    puts "Using #{name} from #{local_path}..."
-    gem name, options.merge(path: local_path).delete_if { |key, _| [:git, :branch].include?(key) }
+    # puts "Using #{name} from #{local_path}..."
+    gem name, options.merge(:path => local_path).delete_if { |key, _| [:git, :branch].include?(key) }
   else
     gem name, options
   end
 end
 
-custom_gem "amq-protocol", git: "https://github.com/ruby-amqp/amq-protocol", branch: "master"
+custom_gem "amq-protocol", :git => "git://github.com/ruby-amqp/amq-protocol.git", :branch => "master"

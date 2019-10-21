@@ -1,20 +1,15 @@
-dist: bionic
 language: ruby
 bundler_args: --without development
-cache: bundler
-before_install:
-  - gem install bundler
-before_script:
-  - "./bin/ci/install_on_debian.sh"
-  - until sudo lsof -i:5672; do echo "Waiting for RabbitMQ to start..."; sleep 1; done
-  - "./bin/ci/before_build.sh"
-script: "bundle exec rake integration_without_recovery"
+before_script: "./bin/ci/before_build.sh"
+script: "bundle exec rspec -cfs spec"
 rvm:
-  - ruby-head
-  - "2.6.3"
-  - "2.5.5"
-  - "2.4.5"
-  - "2.3.8"
+  - "2.1.0"
+  - "2.0"
+  - "1.9.3"
+  - "jruby"
+  - "1.9.2"
+  - "rbx"
+  - "1.8.7"
 notifications:
   email: michael@rabbitmq.com
 services:
@@ -22,11 +17,10 @@ services:
 branches:
   only:
     - master
-    - 2.14.x-stable
-    - 2.13.x-stable
-env:
-  - CI=true
+    - 1.1.x-stable
 matrix:
   allow_failures:
-    rvm:
-      - ruby-head
+    - rvm: rbx
+    - rvm: "1.9.2"
+    - rvm: "1.8.7"
+    - rvm: jruby

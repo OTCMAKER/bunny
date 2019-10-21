@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Queue, "#delete" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -22,7 +22,7 @@ describe Bunny::Queue, "#delete" do
       # no exception as of RabbitMQ 3.2. MK.
       q.delete
 
-      expect(ch.queues.size).to eq 0
+      ch.queues.size.should == 0
     end
   end
 

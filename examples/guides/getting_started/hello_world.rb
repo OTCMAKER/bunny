@@ -4,8 +4,6 @@
 require "rubygems"
 require "bunny"
 
-STDOUT.sync = true
-
 conn = Bunny.new
 conn.start
 

@@ -1,7 +1,7 @@
 # Bunny, a Ruby RabbitMQ Client
 
-Bunny is a RabbitMQ client that focuses on ease of use. It
-is feature complete, supports all recent RabbitMQ features and does not
+Bunny is a synchronous RabbitMQ client that focuses on ease of use. It
+is feature complete, supports all RabbitMQ 3.0 features and does not
 have any heavyweight dependencies.
 
 
@@ -12,8 +12,8 @@ have any heavyweight dependencies.
 
 ## What is Bunny Good For?
 
-One can use Bunny to make Ruby applications interoperate with other
-applications (both built in Ruby and not). Complexity and size may vary from
+One can use amqp gem to make Ruby applications interoperate with other
+applications (both Ruby and not). Complexity and size may vary from
 simple work queues to complex multi-stage data processing workflows that involve
 many applications built with all kinds of technologies.
 
@@ -46,43 +46,41 @@ Specific examples:
 
 ## Supported Ruby Versions
 
-Modern Bunny versions support
+Bunny 0.9 and more recent versions support
 
- * CRuby 2.3 through 2.6 (inclusive)
+ * CRuby 2.1, CRuby 2.0, 1.9.3, 1.9.2, and 1.8.7
+ * Rubinius 2.0+
 
 Bunny works sufficiently well on JRuby but there are known
-JRuby bugs in versions prior to JRuby 9000 that cause high CPU burn. JRuby users should
+JRuby bugs that cause high CPU burn. JRuby users should
 use [March Hare](http://rubymarchhare.info).
-
-Bunny `1.7.x` was the last version to support CRuby 1.9.3 and 1.8.7
 
 
 ## Supported RabbitMQ Versions
 
-Bunny `1.5.0` and later versions only support RabbitMQ `3.3+`.
-Bunny `1.4.x` and earlier supports RabbitMQ 2.x and 3.x.
+Bunny `0.8.x` and later versions only support RabbitMQ 2.x and 3.x.
+Bunny `0.7.x` and earlier versions support RabbitMQ 1.x and 2.x.
 
 
-## Change Log
+## Project Maturity
 
-Bunny is a mature library (started in early 2009) with
+Bunny is a mature library (started in early 2009) library with
 a stable public API.
 
-Change logs per release series:
+Before version 0.9, **a lot** of functionality was missing.  Version
+0.9 can be considered to be "second birthday" for Bunny as it was
+rewritten from scratch with over a dozen of preview releases over the
+course of about a year.
 
- * [master](https://github.com/ruby-amqp/bunny/blob/master/ChangeLog.md)
- * [2.14.x](https://github.com/ruby-amqp/bunny/blob/2.13.x-stable/ChangeLog.md)
- * [2.13.x](https://github.com/ruby-amqp/bunny/blob/2.13.x-stable/ChangeLog.md)
- * [2.12.x](https://github.com/ruby-amqp/bunny/blob/2.12.x-stable/ChangeLog.md)
- * [2.11.x](https://github.com/ruby-amqp/bunny/blob/2.11.x-stable/ChangeLog.md)
-
+We (the maintainers) made our best effort to keep the new version as
+backwards compatible as possible but within reason.
 
 
 ## Installation & Bundler Dependency
 
 ### Most Recent Release
 
-[![Gem Version](https://badge.fury.io/rb/bunny.svg)](http://badge.fury.io/rb/bunny)
+[![Gem Version](https://badge.fury.io/rb/bunny.png)](http://badge.fury.io/rb/bunny)
 
 ### With Rubygems
 
@@ -97,7 +95,7 @@ gem install bunny
 To use Bunny in a project managed with Bundler:
 
 ``` ruby
-gem "bunny", ">= 2.14.1"
+gem "bunny", "~> 1.1.7"
 ```
 
 
@@ -163,53 +161,68 @@ Other documentation guides are available at [rubybunny.info](http://rubybunny.in
 
 ### Mailing List
 
-[Bunny has a mailing list](http://groups.google.com/group/ruby-amqp). Please use it for all questions,
-investigations, and discussions. GitHub issues should be used for specific, well understood, actionable
-maintainers and contributors can work on.
-
-We encourage you to also join the [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
-mailing list. Feel free to ask any questions that you may have.
+[Bunny has a mailing list](http://groups.google.com/group/ruby-amqp). We encourage you
+to also join the [rabbitmq-discuss](https://lists.rabbitmq.com/cgi-bin/mailman/listinfo/rabbitmq-discuss) mailing list. Feel free to ask any questions that you may have.
 
 
-## Continuous Integration
+### IRC
 
-[![Build Status](https://travis-ci.org/ruby-amqp/bunny.svg)](https://travis-ci.org/ruby-amqp/bunny/)
+For more immediate help, please join `#rabbitmq` on `irc.freenode.net`.
 
 
 ### News & Announcements on Twitter
 
 To subscribe for announcements of releases, important changes and so on, please follow [@rubyamqp](https://twitter.com/#!/rubyamqp) on Twitter.
 
-More detailed announcements can be found in the [RabbitMQ Ruby clients blog](http://blog.rubyrabbitmq.info).
+More detailed announcements can be found in the blogs
+
+* [RabbitMQ Ruby clients blog](http://blog.rubyrabbitmq.info)
+* [Bunny Blog](http://bunnyamqp.wordpress.com)
 
 
 ### Reporting Issues
 
-If you find a bug you understand well, poor default, incorrect or unclear piece of documentation,
-or missing feature, please [file an
-issue](http://github.com/ruby-amqp/bunny/issues) on GitHub.
-
-Please use [Bunny's mailing list](http://groups.google.com/group/ruby-amqp) for questions,
-investigations, and discussions. GitHub issues should be used for specific, well understood, actionable
-maintainers and contributors can work on.
-
-When filing an issue, please specify which Bunny and RabbitMQ versions you
-are using, provide recent RabbitMQ log file contents, full exception stack traces,
-and steps to reproduce (or failing test cases).
+If you find a bug, poor default, missing feature or find any part of
+the API inconvenient, please [file an
+issue](http://github.com/ruby-amqp/bunny/issues) on GitHub.  When
+filing an issue, please specify which Bunny and RabbitMQ versions you
+are using, provide recent RabbitMQ log file contents if possible, and
+try to explain what behavior you expected and why. Bonus points for
+contributing failing test cases.
 
 
 ## Other Ruby RabbitMQ Clients
 
-The other widely used Ruby RabbitMQ client is [March Hare](http://rubymarchhare.info) (JRuby-only).
-It's a mature library that require RabbitMQ 3.3.x or later.
+Other widely used Ruby RabbitMQ clients are [March
+Hare](http://rubymarchhare.info) (JRuby-only) and [amqp
+gem](http://rubyamqp.info).  Both are mature libraries and require
+RabbitMQ 2.x or 3.x.
 
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for more information
-about running various test suites.
+First, clone the repository and run
+
+    bundle install --binstubs
+
+then set up RabbitMQ vhosts with
+
+    ./bin/ci/before_build.sh
+
+(if needed, set `RABBITMQCTL` env variable to point to `rabbitmqctl` you want to use)
+
+and then run tests with
+
+    CI=true ./bin/rspec -cfs spec
+
+After that create a branch and make your changes on it. Once you are done with your changes and all tests pass, submit a pull request
+on GitHub.
 
 
 ## License
 
 Released under the MIT license.
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/ruby-amqp/bunny/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+

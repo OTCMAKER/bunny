@@ -15,17 +15,10 @@ module Bunny
 
     attr_reader :threads
     attr_reader :size
-    attr_reader :abort_on_exception
 
-    def initialize(size = 1, abort_on_exception = false, shutdown_timeout = 60)
+    def initialize(size = 1)
       @size  = size
-      @abort_on_exception = abort_on_exception
-      @shutdown_timeout = shutdown_timeout
-      @shutdown_mutex = ::Mutex.new
-      @shutdown_conditional = ::ConditionVariable.new
       @queue = ::Queue.new
-      @paused = false
-      @running = false
     end
 
 
@@ -38,7 +31,6 @@ module Bunny
 
       @size.times do
         t = Thread.new(&method(:run_loop))
-        t.abort_on_exception = true if abort_on_exception
         @threads << t
       end
 
@@ -49,16 +41,7 @@ module Bunny
       @running
     end
 
-    def backlog
-      @queue.length
-    end
-
-    def busy?
-      !@queue.empty?
-    end
-
-    def shutdown(wait_for_workers = false)
-      was_running = running?
+    def shutdown
       @running = false
 
       @size.times do
@@ -66,26 +49,20 @@ module Bunny
           throw :terminate
         end
       end
-
-      return if !(wait_for_workers && @shutdown_timeout && was_running)
-
-      @shutdown_mutex.synchronize do
-        @shutdown_conditional.wait(@shutdown_mutex, @shutdown_timeout)
-      end
     end
 
     def join(timeout = nil)
-      (@threads || []).each { |t| t.join(timeout) }
+      @threads.each { |t| t.join(timeout) }
     end
 
     def pause
       @running = false
-      @paused = true
+
+      @threads.each { |t| t.stop }
     end
 
     def resume
       @running = true
-      @paused = false
 
       @threads.each { |t| t.run }
     end
@@ -93,7 +70,7 @@ module Bunny
     def kill
       @running = false
 
-      (@threads || []).each { |t| t.kill }
+      @threads.each { |t| t.kill }
     end
 
     protected
@@ -101,7 +78,6 @@ module Bunny
     def run_loop
       catch(:terminate) do
         loop do
-          Thread.stop if @paused
           callable = @queue.pop
 
           begin
@@ -112,10 +88,6 @@ module Bunny
             $stderr.puts e.message
           end
         end
-      end
-
-      @shutdown_mutex.synchronize do
-        @shutdown_conditional.signal unless busy?
       end
     end
   end

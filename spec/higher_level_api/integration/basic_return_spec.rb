@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Exchange, "#publish" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -12,7 +12,7 @@ describe Bunny::Exchange, "#publish" do
   end
 
 
-  context "with mandatory: true and a bad [no routes] routing key" do
+  context "with :mandatory => true and a bad [no routes] routing key" do
     it "causes a message to be returned" do
       ch = connection.create_channel
       x  = ch.default_exchange
@@ -22,10 +22,10 @@ describe Bunny::Exchange, "#publish" do
         returned << content
       end
 
-      x.publish("xyzzy", routing_key: rand.to_s, mandatory: true)
+      x.publish("xyzzy", :routing_key => rand.to_s, :mandatory => true)
       sleep 0.5
 
-      expect(returned).to include("xyzzy")
+      returned.should include("xyzzy")
 
       ch.close
     end

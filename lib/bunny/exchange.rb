@@ -1,4 +1,4 @@
-require 'amq/protocol'
+require "bunny/compatibility"
 
 module Bunny
   # Represents AMQP 0.9.1 exchanges.
@@ -6,6 +6,9 @@ module Bunny
   # @see http://rubybunny.info/articles/exchanges.html Exchanges and Publishing guide
   # @see http://rubybunny.info/articles/extensions.html RabbitMQ Extensions guide
   class Exchange
+
+    include Bunny::Compatibility
+
 
     #
     # API
@@ -30,12 +33,12 @@ module Bunny
     attr_accessor :opts
 
 
-    # The default exchange. This exchange is a direct exchange that is predefined by the broker
-    # and that cannot be removed. Every queue is bound to this exchange by default with
-    # the following routing semantics: messages will be routed to the queue with the same
-    # name as the message's routing key. In other words, if a message is published with
-    # a routing key of "weather.usa.ca.sandiego" and there is a queue with this name,
-    # the message will be routed to the queue.
+    # The default exchange. Default exchange is a direct exchange that is predefined.
+    # It cannot be removed. Every queue is bind to this (direct) exchange by default with
+    # the following routing semantics: messages will be routed to the queue withe same
+    # same name as message's routing key. In other words, if a message is published with
+    # a routing key of "weather.usa.ca.sandiego" and there is a queue Q with this name,
+    # that message will be routed to Q.
     #
     # @param [Bunny::Channel] channel_or_connection Channel to use. {Bunny::Session} instances
     #                                               are only supported for backwards compatibility.
@@ -43,11 +46,11 @@ module Bunny
     # @example Publishing a messages to the tasks queue
     #   channel     = Bunny::Channel.new(connection)
     #   tasks_queue = channel.queue("tasks")
-    #   Bunny::Exchange.default(channel).publish("make clean", :routing_key => "tasks")
+    #   Bunny::Exchange.default(channel).publish("make clean", routing_key => "tasks")
     #
     # @see http://rubybunny.info/articles/exchanges.html Exchanges and Publishing guide
     # @see http://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf AMQP 0.9.1 specification (Section 2.1.2.4)
-    # @note Do not confuse the default exchange with amq.direct: amq.direct is a pre-defined direct
+    # @note Do not confuse default exchange with amq.direct: amq.direct is a pre-defined direct
     #       exchange that doesn't have any special routing semantics.
     # @return [Exchange] An instance that corresponds to the default exchange (of type direct).
     # @api public
@@ -55,10 +58,11 @@ module Bunny
       self.new(channel_or_connection, :direct, AMQ::Protocol::EMPTY_STRING, :no_declare => true)
     end
 
-    # @param [Bunny::Channel] channel Channel this exchange will use.
-    # @param [Symbol,String] type     Exchange type
-    # @param [String] name            Exchange name
-    # @param [Hash] opts              Exchange properties
+    # @param [Bunny::Channel] channel_or_connection Channel this exchange will use. {Bunny::Session} instances are supported only for
+    #                                               backwards compatibility with 0.8.
+    # @param [Symbol,String] type                   Exchange type
+    # @param [String] name                          Exchange name
+    # @param [Hash] opts                            Exchange properties
     #
     # @option opts [Boolean] :durable (false)      Should this exchange be durable?
     # @option opts [Boolean] :auto_delete (false)  Should this exchange be automatically deleted when it is no longer used?
@@ -71,8 +75,10 @@ module Bunny
     # @see http://rubybunny.info/articles/exchanges.html Exchanges and Publishing guide
     # @see http://rubybunny.info/articles/extensions.html RabbitMQ Extensions guide
     # @api public
-    def initialize(channel, type, name, opts = {})
-      @channel          = channel
+    def initialize(channel_or_connection, type, name, opts = {})
+      # old Bunny versions pass a connection here. In that case,
+      # we just use default channel from it. MK.
+      @channel          = channel_from(channel_or_connection)
       @name             = name
       @type             = type
       @options          = self.class.add_default_options(name, opts)
@@ -81,8 +87,6 @@ module Bunny
       @auto_delete      = @options[:auto_delete]
       @internal         = @options[:internal]
       @arguments        = @options[:arguments]
-
-      @bindings         = Set.new
 
       declare! unless opts[:no_declare] || predeclared? || (@name == AMQ::Protocol::EMPTY_STRING)
 
@@ -173,7 +177,6 @@ module Bunny
     # @api public
     def bind(source, opts = {})
       @channel.exchange_bind(source, self, opts)
-      @bindings.add(source: source, opts: opts)
 
       self
     end
@@ -194,7 +197,6 @@ module Bunny
     # @api public
     def unbind(source, opts = {})
       @channel.exchange_unbind(source, self, opts)
-      @bindings.delete(source: source, opts: opts)
 
       self
     end
@@ -220,11 +222,8 @@ module Bunny
 
     # @private
     def recover_from_network_failure
-      declare! unless @options[:no_declare] ||predefined?
-
-      @bindings.each do |b|
-        bind(b[:source], b[:opts])
-      end
+      # puts "Recovering exchange #{@name} from network failure"
+      declare! unless predefined?
     end
 
 
@@ -252,6 +251,11 @@ module Bunny
     # @private
     def declare!
       @channel.exchange_declare(@name, @type, @options)
+    end
+
+    # @private
+    def self.add_default_options(name, opts, block)
+      { :exchange => name, :nowait => (block.nil? && !name.empty?) }.merge(opts)
     end
 
     # @private

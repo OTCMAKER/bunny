@@ -1,32 +1,33 @@
 require "spec_helper"
 
 describe "Message framing implementation" do
-    before :all do
-    @connection = Bunny.new(username: "bunny_gem",
-      password:  "bunny_password",
-      vhost: "bunny_testbed",
-      port: ENV.fetch("RABBITMQ_PORT", 5672))
-    @connection.start
+  let(:connection) do
+    c = Bunny.new(:user     => "bunny_gem",
+                  :password => "bunny_password",
+                  :vhost    => "bunny_testbed",
+                  :port     => ENV.fetch("RABBITMQ_PORT", 5672))
+    c.start
+    c
   end
 
   after :all do
-    @connection.close if @connection.open?
+    connection.close if connection.open?
   end
 
 
   unless ENV["CI"]
     context "with payload ~ 248K in size including non-ASCII characters" do
       it "successfully frames the message" do
-        ch = @connection.create_channel
+        ch = connection.create_channel
 
-        q  = ch.queue("", exclusive: true)
+        q  = ch.queue("", :exclusive => true)
         x  = ch.default_exchange
 
         body = IO.read("spec/issues/issue97_attachment.json")
-        x.publish(body, routing_key: q.name, persistent: true)
+        x.publish(body, :routing_key => q.name, :persistent => true)
 
         sleep(1)
-        expect(q.message_count).to eq 1
+        q.message_count.should == 1
 
         q.purge
         ch.close
@@ -37,19 +38,19 @@ describe "Message framing implementation" do
 
   context "with payload of several MBs in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = ("a" * (1024 * 1024 * 4 + 2823777))
-      x.publish(as, routing_key: q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       _, _, payload      = q.pop
-      expect(payload.bytesize).to eq as.bytesize
+      payload.bytesize.should == as.bytesize
 
       ch.close
     end
@@ -59,23 +60,23 @@ describe "Message framing implementation" do
 
   context "with empty message body" do
     it "successfully publishes the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
-      x.publish("", routing_key: q.name, persistent: true)
+      x.publish("", :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       envelope, headers, payload = q.pop
 
-      expect(payload).to eq ""
+      payload.should == ""
 
-      expect(headers[:content_type]).to eq "application/octet-stream"
-      expect(headers[:delivery_mode]).to eq 2
-      expect(headers[:priority]).to eq 0
+      headers[:content_type].should == "application/octet-stream"
+      headers[:delivery_mode].should == 2
+      headers[:priority].should == 0
 
       ch.close
     end
@@ -84,16 +85,16 @@ describe "Message framing implementation" do
 
   context "with payload being 2 bytes less than 128K bytes in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = "a" * (1024 * 128 - 2)
-      x.publish(as, routing_key:  q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       q.purge
       ch.close
@@ -102,16 +103,16 @@ describe "Message framing implementation" do
 
   context "with payload being 1 byte less than 128K bytes in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = "a" * (1024 * 128 - 1)
-      x.publish(as, routing_key:  q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       q.purge
       ch.close
@@ -120,16 +121,16 @@ describe "Message framing implementation" do
 
   context "with payload being exactly 128K bytes in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = "a" * (1024 * 128)
-      x.publish(as, routing_key:  q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       q.purge
       ch.close
@@ -139,16 +140,16 @@ describe "Message framing implementation" do
 
   context "with payload being 1 byte greater than 128K bytes in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = "a" * (1024 * 128 + 1)
-      x.publish(as, routing_key:  q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       q.purge
       ch.close
@@ -157,16 +158,16 @@ describe "Message framing implementation" do
 
   context "with payload being 2 bytes greater than 128K bytes in size" do
     it "successfully frames the message" do
-      ch = @connection.create_channel
+      ch = connection.create_channel
 
-      q  = ch.queue("", exclusive: true)
+      q  = ch.queue("", :exclusive => true)
       x  = ch.default_exchange
 
       as = "a" * (1024 * 128 + 2)
-      x.publish(as, routing_key:  q.name, persistent: true)
+      x.publish(as, :routing_key => q.name, :persistent => true)
 
       sleep(1)
-      expect(q.message_count).to eq 1
+      q.message_count.should == 1
 
       q.purge
       ch.close

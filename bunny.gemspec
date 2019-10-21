@@ -9,9 +9,8 @@ Gem::Specification.new do |s|
   s.version = Bunny::VERSION.dup
   s.homepage = "http://rubybunny.info"
   s.summary = "Popular easy to use Ruby client for RabbitMQ"
-  s.description = "Easy to use, feature complete Ruby client for RabbitMQ 3.3 and later versions."
+  s.description = "Easy to use, feature complete Ruby client for RabbitMQ 2.0 and later versions."
   s.license = "MIT"
-  s.required_ruby_version = Gem::Requirement.new(">= 2.2")
 
   # Sorted alphabetically.
   s.authors = [
@@ -21,14 +20,21 @@ Gem::Specification.new do |s|
     "Michael S. Klishin",
     "Stefan Kaes"]
 
-  s.email = ["michael.s.klishin@gmail.com"]
+  s.email = [
+    "Y2VsbGRlZUBnbWFpbC5jb20=\n",
+    "ZXJpY0A1c3RvcHMuY29t\n",
+    "c3Rhc3RueUAxMDFpZGVhcy5jeg==\n",
+    "bWljaGFlbEBub3ZlbWJlcmFpbi5jb20=\n",
+    "c2thZXNAcmFpbHNleHByZXNzLmRl\n"].
+    map { |mail| Base64.decode64(mail) }
 
   # Dependencies
-  s.add_runtime_dependency 'amq-protocol', '~> 2.3', '>= 2.3.0'
+  s.add_dependency "amq-protocol", ">= 1.9.2"
 
   # Files.
+  s.has_rdoc = true
   s.extra_rdoc_files = ["README.md"]
-  s.files         = `git ls-files`.split("\n").reject { |f| f.match(%r{^bin/ci/}) }
+  s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- spec/*`.split("\n")
   s.require_paths = ["lib"]
 end

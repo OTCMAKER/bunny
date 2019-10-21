@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Exchange do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -17,7 +17,7 @@ describe Bunny::Exchange do
 
       x = Bunny::Exchange.default(ch)
 
-      expect(x.name).to eq ''
+      x.name.should == ''
     end
   end
 
@@ -28,7 +28,7 @@ describe Bunny::Exchange do
 
         name = "bunny.tests.exchanges.fanout#{rand}"
         x    = ch.fanout(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         x.delete
         ch.close
@@ -41,7 +41,7 @@ describe Bunny::Exchange do
 
         name = "amq.fanout"
         x    = ch.fanout(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         ch.close
       end
@@ -55,7 +55,7 @@ describe Bunny::Exchange do
           ch.fanout("amq.test")
         }.to raise_error(Bunny::AccessRefused)
 
-        expect(ch).to be_closed
+        ch.should be_closed
         expect {
           ch.fanout("amq.test")
         }.to raise_error(Bunny::ChannelAlreadyClosed)
@@ -67,10 +67,10 @@ describe Bunny::Exchange do
         ch = connection.create_channel
 
         name = "bunny.tests.exchanges.durable"
-        x    = ch.fanout(name, durable: true)
-        expect(x.name).to eq name
-        expect(x).to be_durable
-        expect(x).not_to be_auto_delete
+        x    = ch.fanout(name, :durable => true)
+        x.name.should == name
+        x.should be_durable
+        x.should_not be_auto_delete
 
         x.delete
         ch.close
@@ -83,12 +83,12 @@ describe Bunny::Exchange do
         ch = connection.create_channel
 
         name = "bunny.tests.exchanges.auto-delete"
-        x    = ch.fanout(name, auto_delete: true)
-        expect(x.name).to eq name
-        expect(x).not_to be_durable
-        expect(x).to be_auto_delete
+        x    = ch.fanout(name, :auto_delete => true)
+        x.name.should == name
+        x.should_not be_durable
+        x.should be_auto_delete
 
-        ch.exchange(name, type: :fanout, auto_delete: true)
+        ch.exchange(name, :type => :fanout, :auto_delete => true)
 
         x.delete
         ch.close
@@ -98,18 +98,17 @@ describe Bunny::Exchange do
 
     context "when declared with a different set of attributes" do
       it "raises an exception" do
-        ch1   = connection.create_channel
-        ch2   = connection.create_channel
+        ch   = connection.create_channel
 
-        x = ch1.fanout("bunny.tests.exchanges.fanout", auto_delete: true, durable: false)
+        x = ch.fanout("bunny.tests.exchanges.fanout", :auto_delete => true, :durable => false)
         expect {
           # force re-declaration
-          ch2.exchange_declare("bunny.tests.exchanges.fanout", :direct, auto_delete: false, durable: true)
+          ch.exchange_declare("bunny.tests.exchanges.fanout", :direct, :auto_delete => false, :durable => true)
         }.to raise_error(Bunny::PreconditionFailed)
 
-        expect(ch2).to be_closed
+        ch.should be_closed
         expect {
-          ch2.fanout("bunny.tests.exchanges.fanout", auto_delete: true, durable: false)
+          ch.fanout("bunny.tests.exchanges.fanout", :auto_delete => true, :durable => false)
         }.to raise_error(Bunny::ChannelAlreadyClosed)
       end
     end
@@ -122,9 +121,9 @@ describe Bunny::Exchange do
 
         name = "bunny.tests.exchanges.direct"
         x    = ch.direct(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
-        ch.exchange(name, type: :direct)
+        ch.exchange(name, :type => :direct)
 
         x.delete
         ch.close
@@ -137,7 +136,7 @@ describe Bunny::Exchange do
 
         name = "amq.direct"
         x    = ch.direct(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         ch.close
       end
@@ -151,9 +150,9 @@ describe Bunny::Exchange do
 
         name = "bunny.tests.exchanges.topic"
         x    = ch.topic(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
-        ch.exchange(name, type: :topic)
+        ch.exchange(name, :type => :topic)
 
         x.delete
         ch.close
@@ -166,7 +165,7 @@ describe Bunny::Exchange do
 
         name = "amq.topic"
         x    = ch.topic(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         ch.close
       end
@@ -180,7 +179,7 @@ describe Bunny::Exchange do
 
         name = "bunny.tests.exchanges.headers"
         x    = ch.headers(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         x.delete
         ch.close
@@ -193,7 +192,7 @@ describe Bunny::Exchange do
 
         name = "amq.match"
         x    = ch.headers(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         ch.close
       end
@@ -205,7 +204,7 @@ describe Bunny::Exchange do
 
         name = "amq.headers"
         x    = ch.headers(name)
-        expect(x.name).to eq name
+        x.name.should == name
 
         ch.close
       end
@@ -216,8 +215,8 @@ describe Bunny::Exchange do
   context "that is internal" do
     it "can be declared" do
       ch = connection.create_channel
-      x  = ch.fanout("bunny.tests.exchanges.internal", internal: true)
-      expect(x).to be_internal
+      x  = ch.fanout("bunny.tests.exchanges.internal", :internal => true)
+      x.should be_internal
       x.delete
 
       ch.close
@@ -228,7 +227,7 @@ describe Bunny::Exchange do
     it "is not internal" do
       ch = connection.create_channel
       x  = ch.fanout("bunny.tests.exchanges.non-internal")
-      expect(x).not_to be_internal
+      x.should_not be_internal
       x.delete
 
       ch.close

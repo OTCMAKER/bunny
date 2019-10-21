@@ -17,7 +17,7 @@ begin
   require "openssl"
 
   require "bunny/ssl_socket"
-rescue LoadError
+rescue LoadError => e
   # no-op
 end
 
@@ -50,7 +50,7 @@ module Bunny
     AMQ::Protocol::PROTOCOL_VERSION
   end
 
-  # Instantiates a new connection. The actual network
+  # Instantiates a new connection. The actual connection network
   # connection is started with {Bunny::Session#start}
   #
   # @return [Bunny::Session]
@@ -58,7 +58,7 @@ module Bunny
   # @see http://rubybunny.info/articles/getting_started.html
   # @see http://rubybunny.info/articles/connecting.html
   # @api public
-  def self.new(connection_string_or_opts = ENV['RABBITMQ_URL'], opts = {})
+  def self.new(connection_string_or_opts = {}, opts = {}, &block)
     if connection_string_or_opts.respond_to?(:keys) && opts.empty?
       opts = connection_string_or_opts
     end
@@ -70,12 +70,8 @@ module Bunny
   end
 
 
-  def self.run(connection_string_or_opts = ENV['RABBITMQ_URL'], opts = {}, &block)
+  def self.run(connection_string_or_opts = {}, opts = {}, &block)
     raise ArgumentError, 'Bunny#run requires a block' unless block
-
-    if connection_string_or_opts.respond_to?(:keys) && opts.empty?
-      opts = connection_string_or_opts
-    end
 
     client = Session.new(connection_string_or_opts, opts)
 

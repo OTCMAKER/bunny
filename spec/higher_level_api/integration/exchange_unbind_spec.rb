@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Exchange do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -17,21 +17,21 @@ describe Bunny::Exchange do
     source      = ch.fanout("bunny.exchanges.source#{rand}")
     destination = ch.fanout("bunny.exchanges.destination#{rand}")
 
-    queue       = ch.queue("", exclusive: true)
+    queue       = ch.queue("", :exclusive => true)
     queue.bind(destination)
 
     destination.bind(source)
     source.publish("")
     sleep 0.5
 
-    expect(queue.message_count).to eq 1
-    queue.pop(manual_ack: true)
+    queue.message_count.should be == 1
+    queue.pop(:ack => true)
 
     destination.unbind(source)
     source.publish("")
     sleep 0.5
 
-    expect(queue.message_count).to eq 0
+    queue.message_count.should be == 0
 
     source.delete
     destination.delete

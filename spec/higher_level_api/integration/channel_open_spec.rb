@@ -2,7 +2,7 @@ require "spec_helper"
 
 describe Bunny::Channel, "when opened" do
   let(:connection) do
-    c = Bunny.new(username: "bunny_gem", password: "bunny_password", vhost: "bunny_testbed")
+    c = Bunny.new(:user => "bunny_gem", :password => "bunny_password", :vhost => "bunny_testbed")
     c.start
     c
   end
@@ -13,17 +13,17 @@ describe Bunny::Channel, "when opened" do
 
   context "without explicitly provided id" do
     it "gets an allocated id and is successfully opened" do
-      expect(connection).to be_connected
+      connection.should be_connected
       ch = connection.create_channel
-      expect(ch).to be_open
+      ch.should be_open
 
-      expect(ch.id).to be > 0
+      ch.id.should be > 0
     end
   end
 
   context "with an explicitly provided id = 0" do
     it "raises ArgumentError" do
-      expect(connection).to be_connected
+      connection.should be_connected
       expect {
         connection.create_channel(0)
       }.to raise_error(ArgumentError)
@@ -34,10 +34,10 @@ describe Bunny::Channel, "when opened" do
   context "with explicitly provided id" do
     it "uses that id and is successfully opened" do
       ch = connection.create_channel(767)
-      expect(connection).to be_connected
-      expect(ch).to be_open
+      connection.should be_connected
+      ch.should be_open
 
-      expect(ch.id).to eq 767
+      ch.id.should == 767
     end
   end
 
@@ -46,12 +46,12 @@ describe Bunny::Channel, "when opened" do
   context "with explicitly provided id that is already taken" do
     it "reuses the channel that is already opened" do
       ch = connection.create_channel(767)
-      expect(connection).to be_connected
-      expect(ch).to be_open
+      connection.should be_connected
+      ch.should be_open
 
-      expect(ch.id).to eq 767
+      ch.id.should == 767
 
-      expect(connection.create_channel(767)).to eq ch
+      connection.create_channel(767).should == ch
     end
   end
 end
